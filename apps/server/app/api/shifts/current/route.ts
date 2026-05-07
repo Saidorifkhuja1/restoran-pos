@@ -1,0 +1,32 @@
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { serverError, success, unauthorized } from "@/lib/responses";
+import { getRestaurantToken } from "@/lib/route-helpers";
+import { UserRole } from "@restopos/types";
+
+const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER] as const;
+
+export async function GET(request: NextRequest) {
+  try {
+    const token = await getRestaurantToken(request, roles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
+
+    const shift = await prisma.shift.findFirst({
+      where: { restaurantId: token.restaurantId, userId: token.userId, isActive: true },
+      select: {
+        id: true,
+        startedAt: true,
+        endedAt: true,
+        totalSales: true,
+        totalOrders: true,
+        isActive: true,
+      },
+      orderBy: { startedAt: "desc" },
+    });
+
+    return success(shift);
+  } catch (error) {
+    console.error("[Current Shift Error]", error);
+    return serverError("Smenani olishda xato");
+  }
+}

@@ -1,0 +1,584 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────────
+// ENUMS
+// ────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  WAITER
+  KITCHEN
+  CASHIER
+}
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  RESERVED
+  BILL_REQUESTED
+}
+
+enum TableShape {
+  SQUARE
+  ROUND
+  RECTANGLE
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  ARRIVED
+  CANCELLED
+  NO_SHOW
+}
+
+enum OrderStatus {
+  OPEN
+  IN_KITCHEN
+  READY
+  BILL
+  PAID
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  PENDING
+  COOKING
+  DONE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  QR
+  MIXED
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+
+// ────────────────────────────────────────────────────────────────
+// SUPER ADMIN
+// ────────────────────────────────────────────────────────────────
+
+model SuperAdmin {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String   // bcrypted
+  name          String
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  restaurants   Restaurant[]
+  
+  @@map("super_admins")
+}
+
+// ────────────────────────────────────────────────────────────────
+// RESTAURANT (Multi-tenant)
+// ────────────────────────────────────────────────────────────────
+
+model Restaurant {
+  id                  String   @id @default(cuid())
+  name                String
+  type                String?
+  logo                String?  // Cloudinary URL
+  address             String?
+  phone               String?
+  
+  // Business details
+  taxId               String?
+  taxPercent          Float    @default(12)
+  currency            String   @default("UZS")
+  receiptFooter       String?
+  
+  // Subscription
+  plan                SubscriptionPlan @default(FREE)
+  planExpiresAt       DateTime?
+  
+  // Status
+  isActive            Boolean  @default(true)
+  
+  // Metadata
+  createdBy           String   // SuperAdminId
+  superAdmin          SuperAdmin @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Relations
+  settings            RestaurantSettings?
+  users               User[]
+  zones               Zone[]
+  tables              Table[]
+  menuCategories      MenuCategory[]
+  menuItems           MenuItem[]
+  orders              Order[]
+  reservations        Reservation[]
+  discounts           Discount[]
+  shifts              Shift[]
+  expenses            Expense[]
+  payments            Payment[]
+  auditLogs           AuditLog[]
+  
+  @@index([createdBy])
+  @@index([isActive])
+  @@map("restaurants")
+}
+
+model RestaurantSettings {
+  id                    String   @id @default(cuid())
+  restaurantId          String   @unique
+  restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  kitchenAlertMinutes   Int      @default(10)
+  autoPrintReceipt      Boolean  @default(false)
+  requireGuestCount     Boolean  @default(true)
+  allowItemNotes        Boolean  @default(true)
+  allowDiscount         Boolean  @default(true)
+  showTax               Boolean  @default(true)
+  showWaiterName        Boolean  @default(true)
+  showTableNumber       Boolean  @default(true)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@map("restaurant_settings")
+}
+
+// ────────────────────────────────────────────────────────────────
+// USERS (Staff)
+// ────────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  name            String
+  phone           String?
+  pin             String   // hashed 4-digit PIN
+  role            UserRole
+  isActive        Boolean  @default(true)
+  
+  // Who created this user
+  createdBy       String?  // UserId or SuperAdminId
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  orders          Order[] @relation("WaiterId")
+  payments        Payment[] @relation("CashierId")
+  shifts          Shift[]
+  expenses        Expense[]
+  createdReservations Reservation[] @relation("CreatedBy")
+  auditLogs       AuditLog[]
+  
+  @@unique([restaurantId, pin])
+  @@index([restaurantId])
+  @@index([role])
+  @@map("users")
+}
+
+// ────────────────────────────────────────────────────────────────
+// ZONES (Hall/Rooms)
+// ────────────────────────────────────────────────────────────────
+
+model Zone {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  name            String   // "Asosiy zal", "VIP xona", "Terassa"
+  color           String   @default("#3B82F6")
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  tables          Table[]
+  
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("zones")
+}
+
+// ────────────────────────────────────────────────────────────────
+// TABLES (Stollar)
+// ────────────────────────────────────────────────────────────────
+
+model Table {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  zoneId          String
+  zone            Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  
+  number          Int
+  capacity        Int
+  shape           TableShape
+  
+  // Position for drag & drop
+  posX            Float    @default(0)
+  posY            Float    @default(0)
+  
+  // Current state
+  status          TableStatus @default(FREE)
+  currentOrderId  String?  // Current order (if occupied)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  orders          Order[]
+  reservations    Reservation[]
+  
+  @@unique([restaurantId, zoneId, number])
+  @@index([restaurantId])
+  @@index([zoneId])
+  @@index([status])
+  @@map("tables")
+}
+
+// ────────────────────────────────────────────────────────────────
+// RESERVATIONS (Bronlar)
+// ────────────────────────────────────────────────────────────────
+
+model Reservation {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  tableId         String
+  table           Table @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  
+  guestName       String
+  guestPhone      String?
+  guestCount      Int
+  scheduledAt     DateTime // Bron vaqti
+  note            String?  // "VIP, tort kerak"
+  
+  status          ReservationStatus @default(PENDING)
+  arrivedAt       DateTime? // Kelgan vaqti
+  
+  createdBy       String
+  user            User @relation("CreatedBy", fields: [createdBy], references: [id])
+  
+  order           Order?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("reservations")
+}
+
+// ────────────────────────────────────────────────────────────────
+// MENU (Menyu)
+// ────────────────────────────────────────────────────────────────
+
+model MenuCategory {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  name            String
+  emoji           String?
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  items           MenuItem[]
+  
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  categoryId      String
+  category        MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  price           Int      // So'mda (narx * 1000 - tiyin yo'q)
+  emoji           String?
+  image           String?  // Cloudinary URL
+  
+  preparationTime Int?     // Daqiqada
+  
+  isActive        Boolean  @default(true)
+  isAvailable     Boolean  @default(true) // Kunlik holat
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  orderItems      OrderItem[]
+  
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@index([categoryId])
+  @@map("menu_items")
+}
+
+// ────────────────────────────────────────────────────────────────
+// ORDERS (Buyurtmalar)
+// ────────────────────────────────────────────────────────────────
+
+model Order {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  tableId         String
+  table           Table @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  
+  orderNumber     Int      // 0001, 0002 - restoran bo'yicha
+  
+  reservationId   String? @unique // If from reservation
+  reservation     Reservation? @relation(fields: [reservationId], references: [id])
+  
+  waiterId        String   // Who took the order
+  waiter          User @relation("WaiterId", fields: [waiterId], references: [id])
+  
+  status          OrderStatus @default(OPEN)
+  guestCount      Int
+  note            String?
+  
+  // Timeline
+  createdAt       DateTime @default(now())
+  sentToKitchenAt DateTime?
+  readyAt         DateTime?
+  billedAt        DateTime?
+  paidAt          DateTime?
+  
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  items           OrderItem[]
+  payment         Payment?
+  
+  @@unique([restaurantId, orderNumber])
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  menuItemId      String
+  menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
+  
+  // Snapshot (agar taom narxi o'zgarganda eski cheklar saqlansin)
+  name            String   // Taom nomi
+  price           Int      // So'mda
+  
+  quantity        Int      @default(1)
+  note            String?  // "kam achchiq", "no onion"
+  
+  status          OrderItemStatus @default(PENDING)
+  doneAt          DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([orderId])
+  @@index([status])
+  @@map("order_items")
+}
+
+// ────────────────────────────────────────────────────────────────
+// PAYMENT (To'lov)
+// ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  orderId         String   @unique
+  order           Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  cashierId       String
+  cashier         User @relation("CashierId", fields: [cashierId], references: [id])
+  
+  // Payment method
+  method          PaymentMethod
+  
+  // Amounts
+  subtotal        Int      // Chegirmasiz, soliqsiz
+  
+  discountId      String?
+  discount        Discount? @relation(fields: [discountId], references: [id])
+  discountPercent Float    @default(0)
+  discountAmount  Int      @default(0)
+  
+  taxPercent      Float
+  taxAmount       Int
+  
+  totalAmount     Int      // Yakuniy summa
+  
+  // Receipt
+  receivedAmount  Int?     // Naqd qabul qilindi
+  changeAmount    Int      @default(0)
+  cardAmount      Int      @default(0)     // MIXED: karta qismi
+  cashAmount      Int      @default(0)     // MIXED: naqd qismi
+  
+  receiptNumber   String?  // #0247
+  receiptPrinted  Boolean  @default(false)
+  
+  paidAt          DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@index([orderId])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+// ────────────────────────────────────────────────────────────────
+// DISCOUNT (Chegirmalar)
+// ────────────────────────────────────────────────────────────────
+
+model Discount {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  name            String   // "VIP mijoz", "Lunch", "Tug'ilgan kun"
+  type            DiscountType
+  value           Int      // 10 (%) yoki 50000 (so'm)
+  
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  payments        Payment[]
+  
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("discounts")
+}
+
+// ────────────────────────────────────────────────────────────────
+// SHIFT (Smena)
+// ────────────────────────────────────────────────────────────────
+
+model Shift {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  
+  totalSales      Int      @default(0)
+  totalOrders     Int      @default(0)
+  
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@index([userId])
+  @@index([isActive])
+  @@map("shifts")
+}
+
+// ────────────────────────────────────────────────────────────────
+// EXPENSE (Xarajat)
+// ────────────────────────────────────────────────────────────────
+
+model Expense {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  amount          Int      // So'mda
+  note            String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@index([createdAt])
+  @@map("expenses")
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  restaurantId    String?
+  restaurant      Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  actorUserId     String?
+  actorUser       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorSuperAdminId String?
+
+  action          String
+  entity          String
+  entityId        String?
+  metadata        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  @@index([restaurantId])
+  @@index([actorUserId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
