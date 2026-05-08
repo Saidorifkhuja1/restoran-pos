@@ -61,6 +61,18 @@ CREATE TABLE "restaurants" (
 );
 
 -- CreateTable
+CREATE TABLE "restaurant_counters" (
+    "id" TEXT NOT NULL,
+    "restaurantId" TEXT NOT NULL,
+    "orderSeq" INTEGER NOT NULL DEFAULT 0,
+    "receiptSeq" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "restaurant_counters_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "restaurant_settings" (
     "id" TEXT NOT NULL,
     "restaurantId" TEXT NOT NULL,
@@ -230,6 +242,8 @@ CREATE TABLE "payments" (
     "taxPercent" DOUBLE PRECISION NOT NULL,
     "taxAmount" INTEGER NOT NULL,
     "totalAmount" INTEGER NOT NULL,
+    "provider" TEXT,
+    "providerPaymentId" TEXT,
     "receivedAmount" INTEGER,
     "changeAmount" INTEGER NOT NULL DEFAULT 0,
     "cardAmount" INTEGER NOT NULL DEFAULT 0,
@@ -281,6 +295,7 @@ CREATE TABLE "expenses" (
     "name" TEXT NOT NULL,
     "amount" INTEGER NOT NULL,
     "note" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -312,6 +327,9 @@ CREATE INDEX "restaurants_createdBy_idx" ON "restaurants"("createdBy");
 
 -- CreateIndex
 CREATE INDEX "restaurants_isActive_idx" ON "restaurants"("isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "restaurant_counters_restaurantId_key" ON "restaurant_counters"("restaurantId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "restaurant_settings_restaurantId_key" ON "restaurant_settings"("restaurantId");
@@ -407,6 +425,9 @@ CREATE INDEX "payments_orderId_idx" ON "payments"("orderId");
 CREATE INDEX "payments_paidAt_idx" ON "payments"("paidAt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "payments_restaurantId_providerPaymentId_key" ON "payments"("restaurantId", "providerPaymentId");
+
+-- CreateIndex
 CREATE INDEX "discounts_restaurantId_idx" ON "discounts"("restaurantId");
 
 -- CreateIndex
@@ -428,6 +449,9 @@ CREATE INDEX "expenses_restaurantId_idx" ON "expenses"("restaurantId");
 CREATE INDEX "expenses_createdAt_idx" ON "expenses"("createdAt");
 
 -- CreateIndex
+CREATE INDEX "expenses_isActive_idx" ON "expenses"("isActive");
+
+-- CreateIndex
 CREATE INDEX "audit_logs_restaurantId_idx" ON "audit_logs"("restaurantId");
 
 -- CreateIndex
@@ -441,6 +465,9 @@ CREATE INDEX "audit_logs_createdAt_idx" ON "audit_logs"("createdAt");
 
 -- AddForeignKey
 ALTER TABLE "restaurants" ADD CONSTRAINT "restaurants_createdBy_fkey" FOREIGN KEY ("createdBy") REFERENCES "super_admins"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "restaurant_counters" ADD CONSTRAINT "restaurant_counters_restaurantId_fkey" FOREIGN KEY ("restaurantId") REFERENCES "restaurants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "restaurant_settings" ADD CONSTRAINT "restaurant_settings_restaurantId_fkey" FOREIGN KEY ("restaurantId") REFERENCES "restaurants"("id") ON DELETE CASCADE ON UPDATE CASCADE;

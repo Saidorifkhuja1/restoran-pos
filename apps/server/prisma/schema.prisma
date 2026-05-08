@@ -144,10 +144,23 @@ model Restaurant {
   expenses            Expense[]
   payments            Payment[]
   auditLogs           AuditLog[]
+  counter             RestaurantCounter?
   
   @@index([createdBy])
   @@index([isActive])
   @@map("restaurants")
+}
+
+model RestaurantCounter {
+  id              String   @id @default(cuid())
+  restaurantId    String   @unique
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderSeq        Int      @default(0)
+  receiptSeq      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("restaurant_counters")
 }
 
 model RestaurantSettings {
@@ -462,6 +475,8 @@ model Payment {
   totalAmount     Int      // Yakuniy summa
   
   // Receipt
+  provider        String?
+  providerPaymentId String?
   receivedAmount  Int?     // Naqd qabul qilindi
   changeAmount    Int      @default(0)
   cardAmount      Int      @default(0)     // MIXED: karta qismi
@@ -477,6 +492,7 @@ model Payment {
   @@index([restaurantId])
   @@index([orderId])
   @@index([paidAt])
+  @@unique([restaurantId, providerPaymentId])
   @@map("payments")
 }
 
@@ -550,12 +566,14 @@ model Expense {
   name            String
   amount          Int      // So'mda
   note            String?
+  isActive        Boolean  @default(true)
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   @@index([restaurantId])
   @@index([createdAt])
+  @@index([isActive])
   @@map("expenses")
 }
 

@@ -28,6 +28,12 @@ async function main() {
     },
   });
 
+  await prisma.restaurantCounter.upsert({
+    where: { restaurantId: restaurant.id },
+    update: {},
+    create: { restaurantId: restaurant.id },
+  });
+
   const demoUsers = [
     ["ADMIN", "Demo Admin", "+998901111111", "1111"],
     ["MANAGER", "Demo Manager", "+998902222222", "2222"],

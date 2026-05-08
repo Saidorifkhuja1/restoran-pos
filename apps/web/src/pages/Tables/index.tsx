@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { getData, Paginated } from "@/api/client";
 import { Badge, PageTitle, Panel } from "@/components/ui";
 import { usePusherEvent } from "@/hooks/usePusher";
@@ -9,6 +10,7 @@ type Table = {
   number: number;
   capacity: number;
   status: "FREE" | "OCCUPIED" | "RESERVED" | "BILL_REQUESTED";
+  currentOrderId?: string | null;
   zone: { id: string; name: string; color: string };
 };
 
@@ -21,6 +23,7 @@ const toneByStatus = {
 
 export function TablesPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const restaurant = useAuthStore((state) => state.restaurant);
   usePusherEvent(restaurant?.id ? `restaurant:${restaurant.id}` : null, "table:status", () => {
     void queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] });
@@ -44,7 +47,10 @@ export function TablesPage() {
               </div>
               <Badge tone={toneByStatus[table.status]}>{table.status}</Badge>
             </div>
-            <button className="w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
+            <button
+              className="w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+              onClick={() => navigate(table.currentOrderId ? `/orders/${table.currentOrderId}` : `/orders?tableId=${table.id}`)}
+            >
               Ochish
             </button>
           </Panel>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, extractToken } from "@/lib/auth";
+import { auth as nextAuthSession } from "@/lib/nextauth";
 import { UserToken, SuperAdminToken } from "@restopos/types";
 
 export type AuthContext = {
@@ -10,6 +11,32 @@ export type AuthContext = {
 };
 
 export async function getAuthContext(request: NextRequest): Promise<AuthContext> {
+  const session = await nextAuthSession().catch(() => null);
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 60 * 60 * 24;
+  if (session?.user?.role === "SUPERADMIN" && session.user.id) {
+    return {
+      token: { role: "SUPERADMIN", superAdminId: session.user.id, iat: now, exp },
+      isAuthenticated: true,
+      isSuperAdmin: true,
+      isRestaurantUser: false,
+    };
+  }
+  if (session?.user?.role && session.user.id && session.user.restaurantId) {
+    return {
+      token: {
+        role: session.user.role as UserToken["role"],
+        userId: session.user.id,
+        restaurantId: session.user.restaurantId,
+        iat: now,
+        exp,
+      },
+      isAuthenticated: true,
+      isSuperAdmin: false,
+      isRestaurantUser: true,
+    };
+  }
+
   const token = extractToken(
     request.headers.get("authorization") || "",
     request.cookies.get("restopos-token")?.value

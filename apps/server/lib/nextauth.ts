@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import type { Session } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -93,6 +94,9 @@ const nextAuth = NextAuth({
 });
 
 export const handlers = nextAuth.handlers;
+export async function auth(): Promise<Session | null> {
+  return nextAuth.auth();
+}
 
 export async function createNextAuthSession(
   credentials: Record<string, string>

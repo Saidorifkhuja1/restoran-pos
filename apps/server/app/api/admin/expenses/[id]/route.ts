@@ -25,7 +25,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
 
     const existing = await prisma.expense.findFirst({
-      where: { id: params.id, restaurantId: token.restaurantId },
+      where: { id: params.id, restaurantId: token.restaurantId, isActive: true },
       select: { id: true },
     });
     if (!existing) return notFound("Xarajat topilmadi");
@@ -59,12 +59,12 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (!token) return unauthorized("Kirish uchun login qiling");
 
     const existing = await prisma.expense.findFirst({
-      where: { id: params.id, restaurantId: token.restaurantId },
+      where: { id: params.id, restaurantId: token.restaurantId, isActive: true },
       select: { id: true },
     });
     if (!existing) return notFound("Xarajat topilmadi");
 
-    await prisma.expense.delete({ where: { id: params.id } });
+    await prisma.expense.update({ where: { id: params.id }, data: { isActive: false } });
     await writeAuditLog(request, {
       restaurantId: token.restaurantId,
       action: "DELETE",

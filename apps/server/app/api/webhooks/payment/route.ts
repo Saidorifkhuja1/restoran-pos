@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound, serverError, success } from "@/lib/responses";
 import { publishEvent, cashierChannel, restaurantChannel } from "@/lib/pusher";
+import { deleteCacheByPattern } from "@/lib/redis";
 import { zodMessage } from "@/lib/route-helpers";
 
 const webhookSchema = z.object({
@@ -79,6 +80,15 @@ export async function POST(request: NextRequest) {
       },
     });
     if (!order) return notFound("Buyurtma topilmadi");
+    const provider = (request.headers.get("x-payment-provider") || "generic").toLowerCase();
+    const existingProviderPayment = await prisma.payment.findFirst({
+      where: {
+        restaurantId: order.restaurantId,
+        providerPaymentId: parsed.data.providerPaymentId,
+      },
+      select: { id: true, orderId: true },
+    });
+    if (existingProviderPayment) return success({ accepted: true, duplicate: true });
     if (order.payment) return success({ accepted: true, duplicate: true });
 
     const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -87,7 +97,12 @@ export async function POST(request: NextRequest) {
     if (parsed.data.amount !== totalAmount) return badRequest("To'lov summasi mos emas");
 
     const payment = await prisma.$transaction(async (tx) => {
-      const count = await tx.payment.count({ where: { restaurantId: order.restaurantId } });
+      const counter = await tx.restaurantCounter.upsert({
+        where: { restaurantId: order.restaurantId },
+        update: { receiptSeq: { increment: 1 } },
+        create: { restaurantId: order.restaurantId, receiptSeq: 1 },
+        select: { receiptSeq: true },
+      });
       const created = await tx.payment.create({
         data: {
           restaurantId: order.restaurantId,
@@ -97,12 +112,14 @@ export async function POST(request: NextRequest) {
             select: { id: true },
           })).id,
           method: parsed.data.method,
+          provider,
+          providerPaymentId: parsed.data.providerPaymentId,
           subtotal,
           taxPercent: order.restaurant.taxPercent,
           taxAmount,
           totalAmount,
           cardAmount: totalAmount,
-          receiptNumber: `#${(count + 1).toString().padStart(4, "0")}`,
+          receiptNumber: `#${counter.receiptSeq.toString().padStart(4, "0")}`,
         },
         select: { id: true, orderId: true, totalAmount: true, method: true, receiptNumber: true },
       });
@@ -113,6 +130,7 @@ export async function POST(request: NextRequest) {
     });
 
     await Promise.all([
+      deleteCacheByPattern(`reports:${order.restaurantId}:*`),
       publishEvent(cashierChannel(order.restaurantId), "payment-done", payment),
       publishEvent(restaurantChannel(order.restaurantId), "order:updated", { orderId: order.id, status: "PAID" }),
       publishEvent(restaurantChannel(order.restaurantId), "table:status", { tableId: order.tableId, status: "FREE" }),

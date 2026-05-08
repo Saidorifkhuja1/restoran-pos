@@ -138,6 +138,11 @@ export async function POST(request: NextRequest) {
           restaurantId: restaurant.id,
         },
       });
+      await tx.restaurantCounter.create({
+        data: {
+          restaurantId: restaurant.id,
+        },
+      });
 
       return { restaurant, adminUser };
     });

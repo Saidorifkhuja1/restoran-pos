@@ -45,25 +45,34 @@ export async function POST(request: NextRequest, context: RouteParams) {
     });
     if (!menuItem) return badRequest("Menyu elementi topilmadi");
 
-    const item = await prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        menuItemId: menuItem.id,
-        name: menuItem.name,
-        price: menuItem.price,
-        quantity: parsed.data.quantity,
-        note: parsed.data.note,
-        status: "COOKING",
-      },
-      select: {
-        id: true,
-        menuItemId: true,
-        name: true,
-        price: true,
-        quantity: true,
-        note: true,
-        status: true,
-      },
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.orderItem.create({
+        data: {
+          orderId: order.id,
+          menuItemId: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price,
+          quantity: parsed.data.quantity,
+          note: parsed.data.note,
+          status: "COOKING",
+        },
+        select: {
+          id: true,
+          menuItemId: true,
+          name: true,
+          price: true,
+          quantity: true,
+          note: true,
+          status: true,
+        },
+      });
+      if (order.status === "OPEN") {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "IN_KITCHEN", sentToKitchenAt: new Date() },
+        });
+      }
+      return created;
     });
 
     await Promise.all([

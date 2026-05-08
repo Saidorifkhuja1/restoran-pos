@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { apiClient, getData, Paginated } from "@/api/client";
 import { Badge, PageTitle, Panel } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
@@ -17,6 +18,7 @@ type Table = { id: string; number: number; status: string };
 
 export function ReservationsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const restaurant = useAuthStore((state) => state.restaurant);
   const [tableId, setTableId] = useState("");
   const [guestName, setGuestName] = useState("");
@@ -43,12 +45,13 @@ export function ReservationsPage() {
     },
   });
   const arrive = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/reservations/${id}/arrive`),
-    onSuccess: async () => {
+    mutationFn: (id: string) => apiClient.post<{ data: { id: string } }>(`/reservations/${id}/arrive`),
+    onSuccess: async (response) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["reservations"] }),
         queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] }),
       ]);
+      navigate(`/orders/${response.data.data.id}`);
     },
   });
   function submit(event: FormEvent<HTMLFormElement>) {

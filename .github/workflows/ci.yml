@@ -43,6 +43,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @restopos/server prisma:generate
+      - run: pnpm lint
       - run: pnpm type-check
       - run: pnpm test
       - run: pnpm build

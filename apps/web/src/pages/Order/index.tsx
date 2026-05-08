@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams, useSearchParams } from "react-router-dom";
 import { apiClient, getData, Paginated } from "@/api/client";
 import { PageTitle, Panel } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
@@ -17,6 +18,14 @@ type Table = {
   number: number;
   status: string;
 };
+type OrderDetail = {
+  id: string;
+  orderNumber: number;
+  status: string;
+  guestCount: number;
+  table: { id: string; number: number };
+  items: { id: string; name: string; price: number; quantity: number; status: string }[];
+};
 
 type CartItem = {
   menuItemId: string;
@@ -28,9 +37,11 @@ type CartItem = {
 
 export function OrderPage() {
   const queryClient = useQueryClient();
+  const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
   const restaurant = useAuthStore((state) => state.restaurant);
   const [categoryId, setCategoryId] = useState<string>("all");
-  const [tableId, setTableId] = useState("");
+  const [tableId, setTableId] = useState(searchParams.get("tableId") || "");
   const [guestCount, setGuestCount] = useState(1);
   const [cart, setCart] = useState<CartItem[]>([]);
   const menu = useQuery({
@@ -43,6 +54,11 @@ export function OrderPage() {
     enabled: Boolean(restaurant?.id),
     queryFn: () => getData<Paginated<Table>>(`/restaurants/${restaurant?.id}/tables?limit=100`),
   });
+  const existingOrder = useQuery({
+    queryKey: ["order", orderId],
+    enabled: Boolean(orderId),
+    queryFn: () => getData<OrderDetail>(`/orders/${orderId}`),
+  });
   const categories = useMemo(() => {
     const seen = new Map<string, string>();
     menu.data?.items.forEach((item) => seen.set(item.category.id, item.category.name));
@@ -50,22 +66,25 @@ export function OrderPage() {
   }, [menu.data?.items]);
   const items = categoryId === "all" ? menu.data?.items : menu.data?.items.filter((item) => item.category.id === categoryId);
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const createOrder = useMutation({
-    mutationFn: () =>
-      apiClient.post("/orders", {
-        tableId,
-        guestCount,
-        items: cart.map((item) => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          note: item.note,
-        })),
-      }),
+  const sendOrder = useMutation({
+    mutationFn: async () => {
+      const items = cart.map((item) => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        note: item.note,
+      }));
+      if (orderId) {
+        await Promise.all(items.map((item) => apiClient.post(`/orders/${orderId}/items`, item)));
+        return;
+      }
+      await apiClient.post("/orders", { tableId, guestCount, items });
+    },
     onSuccess: async () => {
       setCart([]);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] }),
         queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] }),
       ]);
     },
   });
@@ -91,6 +110,11 @@ export function OrderPage() {
   return (
     <>
       <PageTitle title="Buyurtma" subtitle="Menyu va savatcha" />
+      {existingOrder.data ? (
+        <div className="mb-4 rounded-md border border-slate-200 bg-white p-3 text-sm">
+          Order #{existingOrder.data.orderNumber} · Stol {existingOrder.data.table.number} · {existingOrder.data.status}
+        </div>
+      ) : null}
       <div className="mb-4 flex gap-2 overflow-auto">
         <button className={`rounded-md px-3 py-2 text-sm ${categoryId === "all" ? "bg-teal-700 text-white" : "bg-white"}`} onClick={() => setCategoryId("all")}>Barchasi</button>
         {categories.map((category) => (
@@ -113,7 +137,7 @@ export function OrderPage() {
         <Panel>
           <div className="mb-3 text-sm font-semibold">Savatcha</div>
           <div className="mb-3 grid gap-2">
-            <select className="rounded-md border px-3 py-2 text-sm" value={tableId} onChange={(event) => setTableId(event.target.value)}>
+            <select className="rounded-md border px-3 py-2 text-sm" value={orderId ? existingOrder.data?.table.id || "" : tableId} onChange={(event) => setTableId(event.target.value)} disabled={Boolean(orderId)}>
               <option value="">Stol tanlang</option>
               {tables.data?.items.map((table) => (
                 <option key={table.id} value={table.id}>Stol {table.number} · {table.status}</option>
@@ -137,8 +161,8 @@ export function OrderPage() {
             ))}
           </div>
           <div className="my-4 flex justify-between border-t pt-3 font-semibold"><span>Jami</span><span>{total.toLocaleString("uz-UZ")} UZS</span></div>
-          <button disabled={!tableId || cart.length === 0 || createOrder.isPending} className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => createOrder.mutate()}>
-            Oshxonaga yuborish
+          <button disabled={(!orderId && !tableId) || cart.length === 0 || sendOrder.isPending} className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => sendOrder.mutate()}>
+            {sendOrder.isPending ? "Yuborilmoqda..." : "Oshxonaga yuborish"}
           </button>
         </Panel>
       </div>

@@ -17,6 +17,7 @@ type PendingOrder = {
 type Discount = { id: string; name: string; type: "PERCENT" | "FIXED"; value: number };
 type Settings = { autoPrintReceipt: boolean };
 type PaymentMethod = "CASH" | "CARD" | "QR" | "MIXED";
+type PaymentResponse = { receiptNumber?: string | null; method: PaymentMethod; totalAmount: number };
 
 export function CashierPage() {
   const queryClient = useQueryClient();
@@ -28,6 +29,7 @@ export function CashierPage() {
   const [receivedAmount, setReceivedAmount] = useState(0);
   const [cashAmount, setCashAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
+  const [paidReceipt, setPaidReceipt] = useState<PaymentResponse | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const printReceipt = useReactToPrint({ contentRef: receiptRef });
 
@@ -67,7 +69,7 @@ export function CashierPage() {
 
   const pay = useMutation({
     mutationFn: (order: { id: string }) =>
-      apiClient.post(`/orders/${order.id}/payment`, {
+      apiClient.post<{ data: PaymentResponse }>(`/orders/${order.id}/payment`, {
         method,
         discountId: discountId || undefined,
         receivedAmount: method === "CASH" ? receivedAmount : undefined,
@@ -75,8 +77,11 @@ export function CashierPage() {
         cardAmount: method === "MIXED" ? cardAmount : 0,
         receiptPrinted: Boolean(settings.data?.autoPrintReceipt),
       }),
-    onSuccess: async () => {
-      if (settings.data?.autoPrintReceipt) printReceipt();
+    onSuccess: async (response) => {
+      setPaidReceipt(response.data.data);
+      if (settings.data?.autoPrintReceipt) {
+        setTimeout(() => printReceipt(), 50);
+      }
       setSelectedOrder(null);
       await queryClient.invalidateQueries({ queryKey: ["cashier-pending"] });
     },
@@ -86,6 +91,7 @@ export function CashierPage() {
     setSelectedOrder(order);
     setPreviewOrder(order);
     setMethod("CASH");
+    setPaidReceipt(null);
     setDiscountId("");
     setReceivedAmount(Math.round(total * 1.12));
     setCashAmount(0);
@@ -146,7 +152,7 @@ export function CashierPage() {
         <Modal title="80mm chek preview" onClose={() => setPreviewOrder(null)}>
           <div ref={receiptRef} className="mx-auto w-[302px] bg-white p-4 font-mono text-[12px] text-slate-950 print:w-[80mm] print:p-2">
             <div className="text-center text-base font-bold">{restaurant?.name || "RestoPOS"}</div>
-            <div className="text-center">Stol {previewOrder.table.number} · #{previewOrder.orderNumber}</div>
+            <div className="text-center">Stol {previewOrder.table.number} · {paidReceipt?.receiptNumber || `#${previewOrder.orderNumber}`}</div>
             <div className="my-2 border-t border-dashed border-slate-400" />
             {previewOrder.items.map((item) => (
               <div className="mb-1" key={item.id}>
@@ -156,6 +162,7 @@ export function CashierPage() {
             ))}
             <div className="my-2 border-t border-dashed border-slate-400" />
             <ReceiptTotals subtotal={selectedOrder?.id === previewOrder.id ? selectedTotal : previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0)} discount={selectedOrder?.id === previewOrder.id ? discountAmount : 0} tax={selectedOrder?.id === previewOrder.id ? taxAmount : Math.round(previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * ((restaurant?.taxPercent || 12) / 100))} total={selectedOrder?.id === previewOrder.id ? finalTotal : Math.round(previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * (1 + (restaurant?.taxPercent || 12) / 100))} />
+            <div className="mt-2 flex justify-between"><span>To'lov</span><span>{paidReceipt?.method || method}</span></div>
             <div className="mt-3 text-center">Rahmat!</div>
           </div>
           <button className="mt-3 w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={() => printReceipt()}>Print</button>

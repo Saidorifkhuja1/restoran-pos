@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const [items, total] = await Promise.all([
       prisma.expense.findMany({
-        where: { restaurantId: token.restaurantId },
+        where: { restaurantId: token.restaurantId, isActive: true },
         skip,
         take: limit,
         select: {
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.expense.count({ where: { restaurantId: token.restaurantId } }),
+      prisma.expense.count({ where: { restaurantId: token.restaurantId, isActive: true } }),
     ]);
 
     return success({ items, total, page, limit });

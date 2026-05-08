@@ -50,11 +50,11 @@ export async function GET(request: NextRequest) {
       }),
       prisma.order.count({ where: orderWhere }),
       prisma.expense.aggregate({
-        where: { restaurantId: token.restaurantId, createdAt: { gte: from, lte: to } },
+        where: { restaurantId: token.restaurantId, isActive: true, createdAt: { gte: from, lte: to } },
         _sum: { amount: true },
       }),
       prisma.orderItem.groupBy({
-        by: ["name"],
+        by: ["name", "price"],
         where: {
           status: { not: "CANCELLED" },
           order: { restaurantId: token.restaurantId, createdAt: { gte: from, lte: to } },
@@ -100,11 +100,16 @@ export async function GET(request: NextRequest) {
         tax: payments._sum.taxAmount || 0,
         expenses: expenses._sum.amount || 0,
       },
-      topItems: topItems.map((item) => ({
-        name: item.name,
-        quantity: item._sum.quantity || 0,
-        gross: (item._sum.quantity || 0) * (item._sum.price || 0),
-      })),
+      topItems: Object.values(
+        topItems.reduce<Record<string, { name: string; quantity: number; gross: number }>>((acc, item) => {
+          const current = acc[item.name] || { name: item.name, quantity: 0, gross: 0 };
+          const quantity = item._sum.quantity || 0;
+          current.quantity += quantity;
+          current.gross += quantity * item.price;
+          acc[item.name] = current;
+          return acc;
+        }, {})
+      ).sort((left, right) => right.quantity - left.quantity),
       staffSales: staffSales.map((sale) => ({
         user: cashiers.find((cashier) => cashier.id === sale.cashierId) || null,
         totalSales: sale._sum.totalAmount || 0,

@@ -119,12 +119,12 @@ export async function POST(request: NextRequest) {
     }
 
     const order = await prisma.$transaction(async (tx) => {
-      const last = await tx.order.findFirst({
+      const counter = await tx.restaurantCounter.upsert({
         where: { restaurantId: token.restaurantId },
-        orderBy: { orderNumber: "desc" },
-        select: { orderNumber: true },
+        update: { orderSeq: { increment: 1 } },
+        create: { restaurantId: token.restaurantId, orderSeq: 1 },
+        select: { orderSeq: true },
       });
-      const orderNumber = (last?.orderNumber || 0) + 1;
 
       const created = await tx.order.create({
         data: {
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
           tableId: data.tableId,
           reservationId: data.reservationId,
           waiterId: token.userId,
-          orderNumber,
+          orderNumber: counter.orderSeq,
           guestCount: data.guestCount,
           note: data.note,
           status: "IN_KITCHEN",

@@ -24,10 +24,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (reservation.status === "CANCELLED" || reservation.status === "NO_SHOW") return forbidden("Bu bron faol emas");
 
     const order = await prisma.$transaction(async (tx) => {
-      const last = await tx.order.findFirst({
+      const counter = await tx.restaurantCounter.upsert({
         where: { restaurantId: token.restaurantId },
-        orderBy: { orderNumber: "desc" },
-        select: { orderNumber: true },
+        update: { orderSeq: { increment: 1 } },
+        create: { restaurantId: token.restaurantId, orderSeq: 1 },
+        select: { orderSeq: true },
       });
       const created = await tx.order.create({
         data: {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
           tableId: reservation.tableId,
           reservationId: reservation.id,
           waiterId: token.userId,
-          orderNumber: (last?.orderNumber || 0) + 1,
+          orderNumber: counter.orderSeq,
           guestCount: reservation.guestCount,
           note: reservation.note,
           status: "OPEN",

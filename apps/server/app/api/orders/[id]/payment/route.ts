@@ -87,8 +87,13 @@ export async function POST(request: NextRequest, context: RouteParams) {
     }
 
     const payment = await prisma.$transaction(async (tx) => {
-      const count = await tx.payment.count({ where: { restaurantId: token.restaurantId } });
-      const receiptNumber = formatReceiptNumber(count + 1);
+      const counter = await tx.restaurantCounter.upsert({
+        where: { restaurantId: token.restaurantId },
+        update: { receiptSeq: { increment: 1 } },
+        create: { restaurantId: token.restaurantId, receiptSeq: 1 },
+        select: { receiptSeq: true },
+      });
+      const receiptNumber = formatReceiptNumber(counter.receiptSeq);
       const created = await tx.payment.create({
         data: {
           restaurantId: token.restaurantId,
