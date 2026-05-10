@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3001")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

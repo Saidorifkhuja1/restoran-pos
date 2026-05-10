@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   headers: async () => {
     return [
       {
@@ -9,7 +10,7 @@ const nextConfig = {
         headers: [
           {
             key: "Access-Control-Allow-Origin",
-            value: process.env.FRONTEND_URL || "http://localhost:5173",
+            value: process.env.FRONTEND_URL || "http://localhost:3001",
           },
           {
             key: "Access-Control-Allow-Methods",

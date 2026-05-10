@@ -4,12 +4,12 @@ export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 60_000,
   webServer: {
-    command: "cd apps/web && pnpm vite --host 127.0.0.1 --port 5173",
-    url: "http://127.0.0.1:5173",
+    command: "pnpm --filter @restopos/server dev",
+    url: "http://127.0.0.1:3001",
     reuseExistingServer: true,
   },
   use: {
-    baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:5173",
+    baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:3001",
     trace: "on-first-retry",
   },
   projects: [

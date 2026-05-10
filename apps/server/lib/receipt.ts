@@ -1,5 +1,5 @@
 export function receiptQrPayload(receiptNumber: string, orderId: string): string {
-  const publicBaseUrl = process.env.PUBLIC_APP_URL || "http://localhost:5173";
+  const publicBaseUrl = process.env.PUBLIC_APP_URL || "http://localhost:3001";
   return `${publicBaseUrl}/receipt/${encodeURIComponent(orderId)}?receipt=${encodeURIComponent(receiptNumber)}`;
 }
 

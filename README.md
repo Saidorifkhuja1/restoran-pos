@@ -18,8 +18,7 @@ A complete, production-ready restaurant management system built with **Next.js 1
 ```
 restoran-pos/
 ├── apps/
-│   ├── web/          → React 18 + Vite Frontend
-│   └── server/       → Next.js 15 Backend
+│   └── server/       → Next.js 15 full-stack app (frontend + API)
 ├── packages/
 │   ├── types/        → Shared TypeScript types
 │   ├── ui/           → Shared UI components (Radix UI + Tailwind)
@@ -42,7 +41,6 @@ pnpm install
 
 # 2. Setup environment
 cp apps/server/.env.example apps/server/.env
-cp apps/web/.env.example apps/web/.env
 
 # 3. Start database (Docker)
 docker-compose up -d
@@ -57,8 +55,7 @@ cd ../..
 pnpm dev
 ```
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
+- App: http://localhost:3001
 - Prisma Studio: http://localhost:5555
 
 ## 📚 Documentation
@@ -103,12 +100,11 @@ pnpm db:studio        # Prisma Studio
 
 ## 🌍 Deployment
 
-### Frontend (Vercel / Cloudflare Pages)
+### Next.js App (Vercel / Railway)
 ```bash
 pnpm build
 ```
 
-### Backend (Vercel / Railway)
 - Database: Supabase or Railway PostgreSQL
 - Redis: Upstash
 - Files: Cloudinary
@@ -125,7 +121,7 @@ Deploy this as a separate Railway/Render worker process with the same `DATABASE_
 
 ### Required Environment
 
-Use `apps/server/.env.example` and `apps/web/.env.example` for Vercel, Railway, Supabase, Upstash, Pusher and Cloudinary. In production set `RATE_LIMIT_PROD_REDIS_ONLY=true`, strict `CORS_ORIGINS`, strong `JWT_SECRET`/`NEXTAUTH_SECRET`, and provider-specific webhook secrets.
+Use `apps/server/.env.example` for Vercel, Railway, Supabase, Upstash, Pusher and Cloudinary. In production set `RATE_LIMIT_PROD_REDIS_ONLY=true`, strict `CORS_ORIGINS`, strong `JWT_SECRET`/`NEXTAUTH_SECRET`, and provider-specific webhook secrets.
 
 ## 📄 License
 
