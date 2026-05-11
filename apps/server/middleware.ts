@@ -43,6 +43,16 @@ async function redisRateLimit(key: string, limit: number): Promise<boolean | nul
 function memoryRateLimit(key: string, limit: number): boolean {
   const now = Date.now();
   const windowMs = 60_000;
+
+  // Periodic cleanup — remove expired entries every 100 calls
+  if (rateLimitStore.size > 500) {
+    for (const [storedKey, entry] of rateLimitStore) {
+      if (entry.resetAt <= now) {
+        rateLimitStore.delete(storedKey);
+      }
+    }
+  }
+
   const entry = rateLimitStore.get(key);
   if (!entry || entry.resetAt <= now) {
     rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });

@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery } from "@tanstack/react-query";
 import { apiClient, getData } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";

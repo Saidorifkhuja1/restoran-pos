@@ -2,9 +2,19 @@ import { jwtVerify, SignJWT } from "jose";
 import { JWTPayload } from "@restopos/types";
 import { NextResponse } from "next/server";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "your-secret-key-change-in-production"
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("JWT_SECRET environment variable is required in production");
+    }
+    console.warn("[AUTH] JWT_SECRET not set — using insecure default. Set JWT_SECRET in .env");
+    return new TextEncoder().encode("dev-only-insecure-jwt-secret-do-not-use-in-prod");
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "24h";
 
 export async function signSuperAdminToken(superAdminId: string): Promise<string> {

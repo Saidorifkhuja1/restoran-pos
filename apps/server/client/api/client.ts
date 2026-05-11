@@ -1,3 +1,5 @@
+"use client";
+
 import axios, { AxiosError } from "axios";
 import { useAuthStore } from "@/client/store/authStore";
 

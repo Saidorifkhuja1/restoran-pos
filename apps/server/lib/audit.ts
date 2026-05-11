@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getAuthContext } from "@/lib/responses";
+import { AuthContext, getAuthContext } from "@/lib/responses";
 import { SuperAdminToken, UserToken } from "@restopos/types";
 
 export type AuditInput = {
@@ -12,12 +12,18 @@ export type AuditInput = {
   metadata?: Record<string, unknown>;
 };
 
+/**
+ * Writes an audit log entry. Accepts an optional pre-fetched AuthContext
+ * to avoid a redundant `getAuthContext` call when the route handler
+ * has already resolved auth.
+ */
 export async function writeAuditLog(
   request: NextRequest,
-  input: AuditInput
+  input: AuditInput,
+  existingAuth?: AuthContext
 ): Promise<void> {
   try {
-    const auth = await getAuthContext(request);
+    const auth = existingAuth ?? (await getAuthContext(request));
     const actorUserId =
       auth.isRestaurantUser && auth.token && auth.token.role !== "SUPERADMIN"
         ? (auth.token as UserToken).userId

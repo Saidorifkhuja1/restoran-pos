@@ -30,11 +30,11 @@ input[type="number"] {
 
   @media print {
     .no-print {
-      @apply hidden !important;
+      @apply !hidden;
     }
 
     .print-only {
-      @apply block !important;
+      @apply !block;
     }
   }
 }

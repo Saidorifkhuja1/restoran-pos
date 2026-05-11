@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     // Find SuperAdmin
     const superAdmin = await prisma.superAdmin.findUnique({
       where: { email },
+      select: { id: true, email: true, name: true, password: true },
     });
 
     if (!superAdmin) {

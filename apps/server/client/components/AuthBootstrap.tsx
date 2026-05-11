@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect } from "react";
 import { apiClient, ApiEnvelope } from "@/client/api/client";
 import { AuthRestaurant, AuthUser, useAuthStore } from "@/client/store/authStore";
@@ -8,10 +10,15 @@ type MeResponse = {
 };
 
 export function AuthBootstrap({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user);
   const setAuth = useAuthStore((state) => state.setAuth);
   const setHydrated = useAuthStore((state) => state.setHydrated);
 
   useEffect(() => {
+    if (user) {
+      setHydrated(true);
+      return undefined;
+    }
     let mounted = true;
     apiClient
       .get<ApiEnvelope<MeResponse>>("/auth/me")
@@ -28,7 +35,7 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [setAuth, setHydrated]);
+  }, [setAuth, setHydrated, user]);
 
   return <>{children}</>;
 }

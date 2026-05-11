@@ -1,3 +1,5 @@
+"use client";
+
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, getData, Paginated } from "@/client/api/client";

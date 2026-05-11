@@ -5,15 +5,25 @@ import { badRequest, forbidden, notFound, serverError, success, unauthorized } f
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { cashierChannel, publishEvent, restaurantChannel } from "@/lib/pusher";
 import { writeAuditLog } from "@/lib/audit";
-import { UserRole } from "@restopos/types";
+import { UserRole, OrderStatus } from "@restopos/types";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
 const statusSchema = z.object({
-  status: z.enum(["OPEN", "IN_KITCHEN", "READY", "BILL", "PAID", "CANCELLED"]),
+  status: z.enum(["OPEN", "IN_KITCHEN", "READY", "BILL", "CANCELLED"]),
 });
+
+// Allowed status transitions — defines valid business flow
+const ALLOWED_TRANSITIONS: Record<string, readonly string[]> = {
+  OPEN: ["IN_KITCHEN", "CANCELLED"],
+  IN_KITCHEN: ["READY", "CANCELLED"],
+  READY: ["BILL", "CANCELLED"],
+  BILL: ["CANCELLED"], // BILL → PAID only via /payment endpoint
+  PAID: [],            // Terminal state
+  CANCELLED: [],       // Terminal state
+} as const;
 
 const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER] as const;
 
@@ -33,22 +43,34 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     if (!existing) return notFound("Buyurtma topilmadi");
 
     const nextStatus = parsed.data.status;
-    const allowed =
-      token.role === UserRole.KITCHEN
-        ? nextStatus === "READY"
-        : token.role === UserRole.CASHIER
-          ? nextStatus === "PAID"
-          : true;
-    if (!allowed) return forbidden("Bu statusni o'zgartirishga ruxsat yo'q");
+
+    // Validate status transition
+    const allowed = ALLOWED_TRANSITIONS[existing.status] || [];
+    if (!allowed.includes(nextStatus)) {
+      return badRequest(
+        `Statusni "${existing.status}" dan "${nextStatus}" ga o'zgartirib bo'lmaydi`
+      );
+    }
+
+    // Role-based restrictions
+    if (token.role === UserRole.KITCHEN && nextStatus !== "READY") {
+      return forbidden("KDS faqat READY statusini o'zgartiradi");
+    }
+    if (token.role === UserRole.CASHIER) {
+      return forbidden("Kassir faqat to'lov orqali statusni o'zgartiradi");
+    }
+    if (token.role === UserRole.WAITER && !["IN_KITCHEN", "BILL"].includes(nextStatus)) {
+      return forbidden("Bu statusni o'zgartirishga ruxsat yo'q");
+    }
 
     const order = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id: params.id },
         data: {
           status: nextStatus,
+          sentToKitchenAt: nextStatus === "IN_KITCHEN" ? new Date() : undefined,
           readyAt: nextStatus === "READY" ? new Date() : undefined,
           billedAt: nextStatus === "BILL" ? new Date() : undefined,
-          paidAt: nextStatus === "PAID" ? new Date() : undefined,
         },
         select: { id: true, restaurantId: true, orderNumber: true, status: true, tableId: true },
       });
@@ -57,7 +79,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         await tx.table.update({ where: { id: existing.tableId }, data: { status: "BILL_REQUESTED" } });
       }
 
-      if (nextStatus === "PAID" || nextStatus === "CANCELLED") {
+      if (nextStatus === "CANCELLED") {
         await tx.table.update({
           where: { id: existing.tableId },
           data: { status: "FREE", currentOrderId: null },
@@ -81,7 +103,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         : Promise.resolve(),
       publishEvent(restaurantChannel(token.restaurantId), "table:status", {
         tableId: existing.tableId,
-        status: nextStatus === "BILL" ? "BILL_REQUESTED" : nextStatus === "PAID" || nextStatus === "CANCELLED" ? "FREE" : undefined,
+        status: nextStatus === "BILL" ? "BILL_REQUESTED" : nextStatus === "CANCELLED" ? "FREE" : undefined,
       }),
     ]);
 
@@ -91,3 +113,4 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     return serverError("Buyurtma statusini yangilashda xato");
   }
 }
+

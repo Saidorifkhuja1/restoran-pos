@@ -1,3 +1,5 @@
+"use client";
+
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useReactToPrint } from "react-to-print";
@@ -93,7 +95,7 @@ export function CashierPage() {
     setMethod("CASH");
     setPaidReceipt(null);
     setDiscountId("");
-    setReceivedAmount(Math.round(total * 1.12));
+    setReceivedAmount(Math.round(total * (1 + (restaurant?.taxPercent || 12) / 100)));
     setCashAmount(0);
     setCardAmount(0);
   }
@@ -152,7 +154,12 @@ export function CashierPage() {
         <Modal title="80mm chek preview" onClose={() => setPreviewOrder(null)}>
           <div ref={receiptRef} className="mx-auto w-[302px] bg-white p-4 font-mono text-[12px] text-slate-950 print:w-[80mm] print:p-2">
             <div className="text-center text-base font-bold">{restaurant?.name || "RestoPOS"}</div>
-            <div className="text-center">Stol {previewOrder.table.number} · {paidReceipt?.receiptNumber || `#${previewOrder.orderNumber}`}</div>
+            <div className="text-center text-[10px] text-slate-500">{new Date().toLocaleString("uz-UZ")}</div>
+            <div className="my-2 border-t border-dashed border-slate-400" />
+            <div className="flex justify-between"><span>Stol</span><span>{previewOrder.table.number}</span></div>
+            <div className="flex justify-between"><span>Chek</span><span>{paidReceipt?.receiptNumber || `#${previewOrder.orderNumber}`}</span></div>
+            <div className="flex justify-between"><span>Ofitsiant</span><span>{previewOrder.waiter.name}</span></div>
+            {previewOrder.guestCount ? <div className="flex justify-between"><span>Mehmon</span><span>{previewOrder.guestCount}</span></div> : null}
             <div className="my-2 border-t border-dashed border-slate-400" />
             {previewOrder.items.map((item) => (
               <div className="mb-1" key={item.id}>

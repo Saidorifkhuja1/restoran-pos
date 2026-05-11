@@ -107,10 +107,20 @@ export async function POST(request: NextRequest) {
         data: {
           restaurantId: order.restaurantId,
           orderId: order.id,
-          cashierId: (await tx.user.findFirstOrThrow({
-            where: { restaurantId: order.restaurantId, role: "CASHIER", isActive: true },
-            select: { id: true },
-          })).id,
+          cashierId: (await (async () => {
+            const cashier = await tx.user.findFirst({
+              where: { restaurantId: order.restaurantId, role: "CASHIER", isActive: true },
+              select: { id: true },
+            });
+            if (cashier) return cashier.id;
+            // Fallback to admin if no active cashier
+            const admin = await tx.user.findFirst({
+              where: { restaurantId: order.restaurantId, role: "ADMIN", isActive: true },
+              select: { id: true },
+            });
+            if (admin) return admin.id;
+            throw new Error("Restoranda faol kassir yoki admin topilmadi");
+          })()),
           method: parsed.data.method,
           provider,
           providerPaymentId: parsed.data.providerPaymentId,

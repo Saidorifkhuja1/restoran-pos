@@ -1,16 +1,21 @@
-import { NavLink, Outlet } from "react-router-dom";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { apiClient } from "@/client/api/client";
 import { ShiftControls } from "@/client/components/layout/ShiftControls";
 import { useRealtimeInvalidation } from "@/client/hooks/useRealtimeInvalidation";
-import { useAuthStore } from "@/client/store/authStore";
+import { useAuthStore, AuthRole } from "@/client/store/authStore";
 
-const links = [
+type NavLink = { to: string; label: string; roles: AuthRole[] };
+
+const links: NavLink[] = [
   { to: "/tables", label: "Stollar", roles: ["ADMIN", "MANAGER", "WAITER"] },
   { to: "/orders", label: "Buyurtma", roles: ["ADMIN", "MANAGER", "WAITER"] },
   { to: "/kitchen", label: "KDS", roles: ["ADMIN", "MANAGER", "KITCHEN"] },
   { to: "/cashier", label: "Kassa", roles: ["ADMIN", "MANAGER", "CASHIER"] },
   { to: "/reservations", label: "Bron", roles: ["ADMIN", "MANAGER", "WAITER"] },
-  { to: "/admin", label: "Admin", roles: ["ADMIN", "MANAGER"] },
+  { to: "/admin/dashboard", label: "Admin", roles: ["ADMIN", "MANAGER"] },
   { to: "/admin/staff", label: "Xodimlar", roles: ["ADMIN"] },
   { to: "/admin/zones", label: "Zonalar", roles: ["ADMIN", "MANAGER"] },
   { to: "/admin/menu", label: "Menyu", roles: ["ADMIN", "MANAGER"] },
@@ -19,12 +24,13 @@ const links = [
   { to: "/admin/reports", label: "Hisobot", roles: ["ADMIN", "MANAGER"] },
   { to: "/admin/audit", label: "Audit", roles: ["ADMIN", "MANAGER"] },
   { to: "/admin/settings", label: "Sozlama", roles: ["ADMIN"] },
-] as const;
+];
 
-export function AppShell() {
+export function AppShell({ children }: { children?: React.ReactNode }) {
+  const pathname = usePathname();
   const { user, restaurant, logout } = useAuthStore();
   useRealtimeInvalidation();
-  const visibleLinks = links.filter((link) => user && link.roles.includes(user.role as never));
+  const visibleLinks = links.filter((link) => user && link.roles.includes(user.role));
   async function handleLogout() {
     await apiClient.post("/auth/logout").catch(() => undefined);
     logout();
@@ -38,19 +44,20 @@ export function AppShell() {
           <div className="text-sm text-slate-500">{restaurant?.name || user?.name}</div>
         </div>
         <nav className="space-y-1 p-3">
-          {visibleLinks.map((link) => (
-            <NavLink
+          {visibleLinks.map((link) => {
+            const isActive = pathname === link.to || pathname.startsWith(`${link.to}/`);
+            return (
+            <Link
               key={link.to}
-              to={link.to}
-              className={({ isActive }) =>
-                `block rounded-md px-3 py-2 text-sm font-medium ${
-                  isActive ? "bg-teal-50 text-teal-800" : "text-slate-600 hover:bg-slate-100"
-                }`
-              }
+              href={link.to}
+              className={`block rounded-md px-3 py-2 text-sm font-medium ${
+                isActive ? "bg-teal-50 text-teal-800" : "text-slate-600 hover:bg-slate-100"
+              }`}
             >
               {link.label}
-            </NavLink>
-          ))}
+            </Link>
+            );
+          })}
         </nav>
       </aside>
       <div className="md:pl-64">
@@ -67,7 +74,7 @@ export function AppShell() {
           </div>
         </header>
         <main className="p-4">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

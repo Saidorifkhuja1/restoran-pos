@@ -1,3 +1,5 @@
+"use client";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/client/store/authStore";
 import { usePusherEvent } from "@/client/hooks/usePusher";

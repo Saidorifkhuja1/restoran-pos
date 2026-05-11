@@ -1,6 +1,8 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "next/navigation";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";
 import { useAuthStore } from "@/client/store/authStore";
@@ -35,13 +37,19 @@ type CartItem = {
   note?: string;
 };
 
-export function OrderPage() {
+type OrderPageProps = {
+  orderId?: string;
+  tableId?: string;
+};
+
+export function OrderPage(props: OrderPageProps = {}) {
   const queryClient = useQueryClient();
-  const { orderId } = useParams();
-  const [searchParams] = useSearchParams();
+  const params = useParams<{ orderId?: string; tableId?: string }>();
+  const searchParams = useSearchParams();
+  const orderId = props.orderId || params.orderId;
   const restaurant = useAuthStore((state) => state.restaurant);
   const [categoryId, setCategoryId] = useState<string>("all");
-  const [tableId, setTableId] = useState(searchParams.get("tableId") || "");
+  const [tableId, setTableId] = useState(props.tableId || params.tableId || searchParams.get("tableId") || "");
   const [guestCount, setGuestCount] = useState(1);
   const [cart, setCart] = useState<CartItem[]>([]);
   const menu = useQuery({

@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
-import { App } from "@/client/App";
+import { useEffect, useState } from "react";
 import { AuthBootstrap } from "@/client/components/AuthBootstrap";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 20_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 20_000,
+        refetchOnWindowFocus: false,
+        retry: 1,
+      },
     },
-  },
-});
+  });
+}
 
-export function ClientApp() {
+export function ClientProviders({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  const [queryClient] = useState(makeQueryClient);
 
   useEffect(() => {
     setMounted(true);
@@ -32,11 +33,8 @@ export function ClientApp() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthBootstrap>
-          <App />
-        </AuthBootstrap>
-      </BrowserRouter>
+      <AuthBootstrap>{children}</AuthBootstrap>
     </QueryClientProvider>
   );
 }
+

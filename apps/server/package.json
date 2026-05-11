@@ -18,9 +18,12 @@
     "worker:reports": "node --import tsx scripts/report-worker.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^5.8.0",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@restopos/types": "workspace:*",
     "@restopos/utils": "workspace:*",
+    "@tanstack/react-query": "^5.28.0",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.76.6",
@@ -31,17 +34,17 @@
     "jsonwebtoken": "^9.0.2",
     "next": "^15.0.0",
     "next-auth": "^5.0.0-beta.20",
+    "next-pwa": "^5.6.0",
     "pdfkit": "^0.18.0",
     "pusher": "^5.3.3",
     "pusher-js": "^8.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.20.0",
+    "react-hook-form": "^7.75.0",
     "react-to-print": "^3.3.0",
     "redis": "^4.6.0",
-    "zustand": "^4.4.0",
-    "@tanstack/react-query": "^5.28.0",
-    "zod": "^3.22.0"
+    "zod": "^3.22.0",
+    "zustand": "^4.4.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",

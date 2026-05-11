@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery } from "@tanstack/react-query";
 import { getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";

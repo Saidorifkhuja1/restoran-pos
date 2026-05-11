@@ -1,3 +1,5 @@
+"use client";
+
 export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-4">
@@ -7,8 +9,8 @@ export function PageTitle({ title, subtitle }: { title: string; subtitle?: strin
   );
 }
 
-export function Panel({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">{children}</section>;
+export function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <section className={`rounded-md border border-slate-200 bg-white p-4 shadow-sm ${className || ""}`}>{children}</section>;
 }
 
 export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "yellow" | "red" | "blue" }) {

@@ -1,1 +1,3 @@
-export { GET, POST } from "@/app/api/nextauth/[...nextauth]/route";
+import { handlers } from "@/lib/nextauth";
+
+export const { GET, POST } = handlers;

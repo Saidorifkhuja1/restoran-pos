@@ -1,5 +1,7 @@
+"use client";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { getData, Paginated } from "@/client/api/client";
 import { Badge, PageTitle, Panel } from "@/client/components/ui";
 import { usePusherEvent } from "@/client/hooks/usePusher";
@@ -23,7 +25,7 @@ const toneByStatus = {
 
 export function TablesPage() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const router = useRouter();
   const restaurant = useAuthStore((state) => state.restaurant);
   usePusherEvent(restaurant?.id ? `restaurant:${restaurant.id}` : null, "table:status", () => {
     void queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] });
@@ -49,7 +51,7 @@ export function TablesPage() {
             </div>
             <button
               className="w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
-              onClick={() => navigate(table.currentOrderId ? `/orders/${table.currentOrderId}` : `/orders?tableId=${table.id}`)}
+              onClick={() => router.push(table.currentOrderId ? `/orders/${table.currentOrderId}` : `/order/${table.id}`)}
             >
               Ochish
             </button>

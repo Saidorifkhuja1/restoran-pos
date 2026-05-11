@@ -1,5 +1,5 @@
-import { ClientApp } from "@/client/ClientApp";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <ClientApp />;
+  redirect("/tables");
 }

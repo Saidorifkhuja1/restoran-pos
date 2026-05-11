@@ -1,5 +1,7 @@
+"use client";
+
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";
@@ -74,7 +76,7 @@ export function SuperAdminDashboard() {
         <div className="divide-y divide-slate-100">
           {restaurants.data?.items.map((restaurant) => (
             <div className="flex flex-wrap items-center justify-between gap-3 py-3" key={restaurant.id}>
-              <div><Link className="font-medium text-teal-800 hover:underline" to={`/superadmin/restaurants/${restaurant.id}`}>{restaurant.name}</Link><div className="text-sm text-slate-500">{restaurant.type || "Restaurant"}</div></div>
+              <div><Link className="font-medium text-teal-800 hover:underline" href={`/superadmin/restaurants/${restaurant.id}`}>{restaurant.name}</Link><div className="text-sm text-slate-500">{restaurant.type || "Restaurant"}</div></div>
               <div className="flex items-center gap-2">
                 <select className="rounded-md border px-2 py-1 text-sm" value={restaurant.plan} onChange={(event) => changePlan.mutate({ id: restaurant.id, plan: event.target.value })}>
                   <option value="FREE">FREE</option><option value="BASIC">BASIC</option><option value="PRO">PRO</option><option value="ENTERPRISE">ENTERPRISE</option>

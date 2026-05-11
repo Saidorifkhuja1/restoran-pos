@@ -1,4 +1,7 @@
-import { Link, useParams } from "react-router-dom";
+"use client";
+
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, getData } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";
@@ -16,7 +19,8 @@ type RestaurantDetail = {
 };
 
 export function SuperAdminRestaurantDetail() {
-  const { id } = useParams();
+  const params = useParams<{ id?: string }>();
+  const id = params.id;
   const queryClient = useQueryClient();
   const restaurant = useQuery({
     queryKey: ["superadmin-restaurant", id],
@@ -32,7 +36,7 @@ export function SuperAdminRestaurantDetail() {
     <main className="min-h-screen bg-slate-50 p-4">
       <div className="mb-4 flex items-center justify-between">
         <PageTitle title={restaurant.data?.name || "Restoran"} subtitle="Detail, adminlar, xodimlar va statistika" />
-        <Link className="rounded-md border px-3 py-2 text-sm" to="/superadmin">Orqaga</Link>
+        <Link className="rounded-md border px-3 py-2 text-sm" href="/superadmin/dashboard">Orqaga</Link>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <Panel>
