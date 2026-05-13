@@ -1,8 +1,11 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
 import { useReactToPrint } from "react-to-print";
+import { z } from "zod";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { Modal, PageTitle, Panel } from "@/client/components/ui";
 import { usePusherEvent } from "@/client/hooks/usePusher";
@@ -21,17 +24,28 @@ type Settings = { autoPrintReceipt: boolean };
 type PaymentMethod = "CASH" | "CARD" | "QR" | "MIXED";
 type PaymentResponse = { receiptNumber?: string | null; method: PaymentMethod; totalAmount: number };
 
+const paymentSchema = z.object({
+  method: z.enum(["CASH", "CARD", "QR", "MIXED"]),
+  discountId: z.string().optional(),
+  receivedAmount: z.coerce.number().min(0),
+  cashAmount: z.coerce.number().min(0),
+  cardAmount: z.coerce.number().min(0),
+});
+type PaymentForm = z.infer<typeof paymentSchema>;
+
 export function CashierPage() {
   const queryClient = useQueryClient();
   const restaurant = useAuthStore((state) => state.restaurant);
   const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
   const [previewOrder, setPreviewOrder] = useState<PendingOrder | null>(null);
-  const [method, setMethod] = useState<PaymentMethod>("CASH");
-  const [discountId, setDiscountId] = useState("");
-  const [receivedAmount, setReceivedAmount] = useState(0);
-  const [cashAmount, setCashAmount] = useState(0);
-  const [cardAmount, setCardAmount] = useState(0);
   const [paidReceipt, setPaidReceipt] = useState<PaymentResponse | null>(null);
+  const form = useForm<PaymentForm>({
+    resolver: zodResolver(paymentSchema),
+    defaultValues: { method: "CASH", discountId: "", receivedAmount: 0, cashAmount: 0, cardAmount: 0 },
+  });
+  const method = form.watch("method");
+  const discountId = form.watch("discountId") || "";
+  const receivedAmount = form.watch("receivedAmount");
   const receiptRef = useRef<HTMLDivElement>(null);
   const printReceipt = useReactToPrint({ contentRef: receiptRef });
 
@@ -70,13 +84,13 @@ export function CashierPage() {
   const finalTotal = Math.max(0, selectedTotal - discountAmount + taxAmount);
 
   const pay = useMutation({
-    mutationFn: (order: { id: string }) =>
+    mutationFn: ({ order, values }: { order: { id: string }; values: PaymentForm }) =>
       apiClient.post<{ data: PaymentResponse }>(`/orders/${order.id}/payment`, {
-        method,
-        discountId: discountId || undefined,
-        receivedAmount: method === "CASH" ? receivedAmount : undefined,
-        cashAmount: method === "MIXED" ? cashAmount : 0,
-        cardAmount: method === "MIXED" ? cardAmount : 0,
+        method: values.method,
+        discountId: values.discountId || undefined,
+        receivedAmount: values.method === "CASH" ? values.receivedAmount : undefined,
+        cashAmount: values.method === "MIXED" ? values.cashAmount : 0,
+        cardAmount: values.method === "MIXED" ? values.cardAmount : 0,
         receiptPrinted: Boolean(settings.data?.autoPrintReceipt),
       }),
     onSuccess: async (response) => {
@@ -92,17 +106,18 @@ export function CashierPage() {
   function openPayment(order: PendingOrder, total: number) {
     setSelectedOrder(order);
     setPreviewOrder(order);
-    setMethod("CASH");
     setPaidReceipt(null);
-    setDiscountId("");
-    setReceivedAmount(Math.round(total * (1 + (restaurant?.taxPercent || 12) / 100)));
-    setCashAmount(0);
-    setCardAmount(0);
+    form.reset({
+      method: "CASH",
+      discountId: "",
+      receivedAmount: Math.round(total * (1 + (restaurant?.taxPercent || 12) / 100)),
+      cashAmount: 0,
+      cardAmount: 0,
+    });
   }
-  function submitPayment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (selectedOrder) pay.mutate({ id: selectedOrder.id });
-  }
+  useEffect(() => {
+    if (method === "CASH") form.setValue("receivedAmount", Math.max(receivedAmount, finalTotal));
+  }, [finalTotal, form, method, receivedAmount]);
 
   return (
     <>
@@ -129,19 +144,19 @@ export function CashierPage() {
       </div>
       {selectedOrder ? (
         <Modal title={`To'lov #${selectedOrder.orderNumber}`} onClose={() => setSelectedOrder(null)}>
-          <form className="space-y-3" onSubmit={submitPayment}>
-            <select aria-label="To'lov usuli" className="w-full rounded-md border px-3 py-2" value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)}>
+          <form className="space-y-3" onSubmit={form.handleSubmit((values) => pay.mutate({ order: selectedOrder, values }))}>
+            <select aria-label="To'lov usuli" className="w-full rounded-md border px-3 py-2" {...form.register("method")}>
               <option value="CASH">CASH</option><option value="CARD">CARD</option><option value="QR">QR</option><option value="MIXED">MIXED</option>
             </select>
-            <select aria-label="Chegirma" className="w-full rounded-md border px-3 py-2" value={discountId} onChange={(event) => setDiscountId(event.target.value)}>
+            <select aria-label="Chegirma" className="w-full rounded-md border px-3 py-2" {...form.register("discountId")}>
               <option value="">Chegirma yo'q</option>
               {discounts.data?.items.map((discount) => <option value={discount.id} key={discount.id}>{discount.name}</option>)}
             </select>
-            {method === "CASH" ? <input aria-label="Qabul qilingan summa" className="w-full rounded-md border px-3 py-2" type="number" value={receivedAmount} onChange={(event) => setReceivedAmount(Number(event.target.value))} /> : null}
+            {method === "CASH" ? <input aria-label="Qabul qilingan summa" className="w-full rounded-md border px-3 py-2" type="number" {...form.register("receivedAmount")} /> : null}
             {method === "MIXED" ? (
               <div className="grid grid-cols-2 gap-2">
-                <input aria-label="Naqd summa" className="rounded-md border px-3 py-2" type="number" placeholder="Naqd" value={cashAmount} onChange={(event) => setCashAmount(Number(event.target.value))} />
-                <input aria-label="Karta summa" className="rounded-md border px-3 py-2" type="number" placeholder="Karta" value={cardAmount} onChange={(event) => setCardAmount(Number(event.target.value))} />
+                <input aria-label="Naqd summa" className="rounded-md border px-3 py-2" type="number" placeholder="Naqd" {...form.register("cashAmount")} />
+                <input aria-label="Karta summa" className="rounded-md border px-3 py-2" type="number" placeholder="Karta" {...form.register("cardAmount")} />
               </div>
             ) : null}
             <ReceiptTotals subtotal={selectedTotal} discount={discountAmount} tax={taxAmount} total={finalTotal} change={method === "CASH" ? Math.max(0, receivedAmount - finalTotal) : undefined} />

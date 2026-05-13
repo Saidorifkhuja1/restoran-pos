@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: #f8f8f8;
+  --color-surface: #ffffff;
+  --color-surface2: #f2f2f2;
+  --color-text: #0d0f12;
+  --color-muted: #5c6068;
+  --color-hint: #6b7280;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-header-bg: rgba(248, 248, 248, 0.56);
+  --color-header-border: rgba(0, 0, 0, 0.06);
+  --color-primary: #13EC37;
+  --color-primary-contrast: #121417;
+  --color-danger: #ff3b30;
+}
+
+.dark {
+  --color-bg: #0a0a0a;
+  --color-surface: #1a1a1c;
+  --color-surface2: #242426;
+  --color-text: #ffffff;
+  --color-muted: #a0a0a2;
+  --color-hint: #606062;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-header-bg: rgba(10, 10, 10, 0.56);
+  --color-header-border: rgba(255, 255, 255, 0.12);
+  --color-primary: #13EC37;
+  --color-primary-contrast: #121417;
+}
+
 * {
   @apply box-border;
 }
@@ -10,8 +39,30 @@ html {
   @apply scroll-smooth;
 }
 
+.glass-blur {
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+  isolation: isolate;
+}
+
 body {
-  @apply bg-white text-gray-900 antialiased;
+  background: var(--color-bg);
+  color: var(--color-text);
+  @apply antialiased;
+}
+
+input,
+select,
+textarea {
+  @apply border-slate-300 bg-white text-slate-950 shadow-sm outline-none transition;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  @apply border-teal-600 ring-2 ring-teal-100;
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -37,4 +88,52 @@ input[type="number"] {
       @apply !block;
     }
   }
+}
+
+.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+.dark .bg-slate-100,
+.dark .bg-slate-50 {
+  @apply bg-slate-950;
+}
+
+.dark .bg-white,
+.dark .bg-white\/95 {
+  @apply bg-slate-900;
+}
+
+.dark .bg-slate-50 {
+  @apply bg-slate-800;
+}
+
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  @apply text-slate-100;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  @apply text-slate-300;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark .border-slate-400 {
+  @apply border-slate-700;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  @apply border-slate-700 bg-slate-900 text-slate-100;
+}
+
+.dark .shadow-sm,
+.dark .shadow-lg,
+.dark .shadow-xl {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }

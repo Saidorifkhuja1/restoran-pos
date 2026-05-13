@@ -22,9 +22,6 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
-      void navigator.serviceWorker.register("/sw.js");
-    }
   }, []);
 
   if (!mounted) {
@@ -37,4 +34,3 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 }
-

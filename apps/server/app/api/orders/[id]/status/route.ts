@@ -5,7 +5,7 @@ import { badRequest, forbidden, notFound, serverError, success, unauthorized } f
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { cashierChannel, publishEvent, restaurantChannel } from "@/lib/pusher";
 import { writeAuditLog } from "@/lib/audit";
-import { UserRole, OrderStatus } from "@restopos/types";
+import { UserRole } from "@restopos/types";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -113,4 +113,3 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     return serverError("Buyurtma statusini yangilashda xato");
   }
 }
-

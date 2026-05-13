@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
       throw new Error("JWT_SECRET environment variable is required in production");
     }
     console.warn("[AUTH] JWT_SECRET not set — using insecure default. Set JWT_SECRET in .env");

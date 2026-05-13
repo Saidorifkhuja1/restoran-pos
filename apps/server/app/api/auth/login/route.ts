@@ -8,8 +8,12 @@ import { badRequest, unauthorized, serverError, success, notFound } from "@/lib/
 import { zodMessage } from "@/lib/route-helpers";
 
 const loginSchema = z.object({
-  restaurantId: z.string().min(1, "Restoran ID majburiy"),
-  pin: z.string().length(4, "PIN 4 raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak"),
+  login: z.string().min(2, "Login majburiy").optional(),
+  password: z.string().length(4, "Parol 4 raqam bo'lishi kerak").regex(/^\d+$/, "Parol faqat raqamlardan iborat bo'lishi kerak").optional(),
+  restaurantId: z.string().min(1, "Restoran ID majburiy").optional(),
+  pin: z.string().length(4, "PIN 4 raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak").optional(),
+}).refine((data) => Boolean((data.login && data.password) || (data.restaurantId && data.pin)), {
+  message: "Login/parol majburiy",
 });
 
 type LoginRequest = z.infer<typeof loginSchema>;
@@ -28,38 +32,73 @@ export async function POST(request: NextRequest) {
       return badRequest(zodMessage(parseResult.error));
     }
 
-    const { restaurantId, pin } = parseResult.data as LoginRequest;
+    const { login, password } = parseResult.data as LoginRequest;
+    let restaurantId = parseResult.data.restaurantId;
+    const pin = parseResult.data.pin ?? password;
+    if (!pin) {
+      return badRequest("Parol majburiy");
+    }
 
-    // Check restaurant exists and is active
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { id: true, isActive: true },
-    });
+    const normalizedLogin = login?.trim();
+    const roleLogin = normalizedLogin?.toUpperCase();
+    const userCandidates = normalizedLogin
+      ? await prisma.user.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { phone: normalizedLogin },
+              { name: { equals: normalizedLogin, mode: "insensitive" } },
+              ...(roleLogin && ["ADMIN", "MANAGER", "WAITER", "KITCHEN", "CASHIER"].includes(roleLogin) ? [{ role: roleLogin as "ADMIN" | "MANAGER" | "WAITER" | "KITCHEN" | "CASHIER" }] : []),
+            ],
+          },
+          include: {
+            restaurant: {
+              select: {
+                id: true,
+                name: true,
+                currency: true,
+                taxPercent: true,
+                isActive: true,
+              },
+            },
+          },
+        })
+      : [];
 
-    if (!restaurant) {
+    const legacyRestaurant = restaurantId
+      ? await prisma.restaurant.findUnique({
+          where: { id: restaurantId },
+          select: { id: true, isActive: true },
+        })
+      : null;
+
+    if (!normalizedLogin && !legacyRestaurant) {
       return notFound("Restoran topilmadi");
     }
 
-    if (!restaurant.isActive) {
+    if (legacyRestaurant && !legacyRestaurant.isActive) {
       return unauthorized("Bu restoran faollashtirilmagan");
     }
 
-    const users = await prisma.user.findMany({
-      where: {
-        restaurantId,
-        isActive: true,
-      },
-      include: {
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-            currency: true,
-            taxPercent: true,
+    const users = normalizedLogin
+      ? userCandidates
+      : await prisma.user.findMany({
+          where: {
+            restaurantId,
+            isActive: true,
           },
-        },
-      },
-    });
+          include: {
+            restaurant: {
+              select: {
+                id: true,
+                name: true,
+                currency: true,
+                taxPercent: true,
+                isActive: true,
+              },
+            },
+          },
+        });
 
     const user = (
       await Promise.all(
@@ -71,14 +110,20 @@ export async function POST(request: NextRequest) {
     ).find(({ matches }) => matches)?.candidate;
 
     if (!user) {
-      return unauthorized("PIN noto'g'ri");
+      return unauthorized("Login yoki parol noto'g'ri");
     }
 
+    if (!user.restaurant.isActive) {
+      return unauthorized("Bu restoran faollashtirilmagan");
+    }
+
+    const authRestaurantId = user.restaurantId;
+
     // Generate JWT token
-    const token = await signUserToken(user.id, restaurantId, user.role);
+    const token = await signUserToken(user.id, authRestaurantId, user.role);
     await createNextAuthSession({
       flow: "STAFF",
-      restaurantId,
+      restaurantId: authRestaurantId,
       pin,
     }).catch(() => undefined);
 

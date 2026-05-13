@@ -1,39 +1,43 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { UserRole } from "@restopos/types";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel, Badge, Modal } from "@/client/components/ui";
 
-type Staff = { id: string; name: string; phone?: string | null; role: string; isActive: boolean };
+type StaffRole = UserRole.MANAGER | UserRole.WAITER | UserRole.KITCHEN | UserRole.CASHIER;
+type Staff = { id: string; name: string; phone?: string | null; role: StaffRole; isActive: boolean };
+
+const staffSchema = z.object({
+  name: z.string().min(2, "Ism kerak"),
+  phone: z.string().optional(),
+  pin: z.string().regex(/^\d{4}$/, "PIN 4 raqam bo'lishi kerak"),
+  role: z.enum([UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER]),
+});
+const editStaffSchema = staffSchema.extend({ pin: z.string().optional() });
+
+type StaffForm = z.infer<typeof staffSchema>;
+type EditStaffForm = z.infer<typeof editStaffSchema>;
 
 export function StaffPage() {
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
-  const [role, setRole] = useState("WAITER");
   const [editing, setEditing] = useState<Staff | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editRole, setEditRole] = useState("WAITER");
-  const [editPin, setEditPin] = useState("");
+  const createForm = useForm<StaffForm>({ resolver: zodResolver(staffSchema), defaultValues: { name: "", phone: "", pin: "", role: UserRole.WAITER } });
+  const editForm = useForm<EditStaffForm>({ resolver: zodResolver(editStaffSchema), defaultValues: { name: "", phone: "", pin: "", role: UserRole.WAITER } });
   const staff = useQuery({ queryKey: ["admin-staff"], queryFn: () => getData<Paginated<Staff>>("/admin/staff?limit=100") });
   const createStaff = useMutation({
-    mutationFn: () => apiClient.post("/admin/staff", { name, phone: phone || undefined, pin, role }),
+    mutationFn: (values: StaffForm) => apiClient.post("/admin/staff", { ...values, phone: values.phone || undefined }),
     onSuccess: async () => {
-      setName(""); setPhone(""); setPin("");
+      createForm.reset({ name: "", phone: "", pin: "", role: UserRole.WAITER });
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     },
   });
   const updateStaff = useMutation({
-    mutationFn: () =>
-      apiClient.put(`/admin/staff/${editing?.id}`, {
-        name: editName,
-        phone: editPhone || undefined,
-        role: editRole,
-        newPin: editPin || undefined,
-      }),
+    mutationFn: (values: EditStaffForm) => apiClient.put(`/admin/staff/${editing?.id}`, { name: values.name, phone: values.phone || undefined, role: values.role, newPin: values.pin || undefined }),
     onSuccess: async () => {
       setEditing(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
@@ -43,32 +47,23 @@ export function StaffPage() {
     mutationFn: (id: string) => apiClient.delete(`/admin/staff/${id}`),
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-staff"] }),
   });
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    createStaff.mutate();
-  }
-  function openEdit(user: Staff) {
-    setEditing(user);
-    setEditName(user.name);
-    setEditPhone(user.phone || "");
-    setEditRole(user.role);
-    setEditPin("");
-  }
+  useEffect(() => {
+    if (editing) editForm.reset({ name: editing.name, phone: editing.phone || "", role: editing.role, pin: "" });
+  }, [editForm, editing]);
 
   return (
     <>
       <PageTitle title="Xodimlar" subtitle="Manager, waiter, kitchen va cashier yaratish" />
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
         <Panel>
-          <form className="space-y-3" onSubmit={submit}>
-            <input className="w-full rounded-md border px-3 py-2" placeholder="Ism" value={name} onChange={(event) => setName(event.target.value)} />
-            <input className="w-full rounded-md border px-3 py-2" placeholder="Telefon" value={phone} onChange={(event) => setPhone(event.target.value)} />
-            <input className="w-full rounded-md border px-3 py-2" placeholder="PIN" maxLength={4} value={pin} onChange={(event) => setPin(event.target.value)} />
-            <select className="w-full rounded-md border px-3 py-2" value={role} onChange={(event) => setRole(event.target.value)}>
-              <option value="MANAGER">MANAGER</option><option value="WAITER">WAITER</option><option value="KITCHEN">KITCHEN</option><option value="CASHIER">CASHIER</option>
+          <form className="space-y-3" onSubmit={createForm.handleSubmit((values) => createStaff.mutate(values))}>
+            <input className="w-full rounded-md border px-3 py-2" placeholder="Ism" {...createForm.register("name")} />
+            <input className="w-full rounded-md border px-3 py-2" placeholder="Telefon" {...createForm.register("phone")} />
+            <input className="w-full rounded-md border px-3 py-2" placeholder="PIN" maxLength={4} {...createForm.register("pin")} />
+            <select className="w-full rounded-md border px-3 py-2" {...createForm.register("role")}>
+              <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
             </select>
-            <button className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white">Yaratish</button>
+            <button disabled={createStaff.isPending} className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Yaratish</button>
           </form>
         </Panel>
         <Panel>
@@ -76,7 +71,7 @@ export function StaffPage() {
             {staff.data?.items.map((user) => (
               <div className="flex items-center justify-between py-3" key={user.id}>
                 <div><div className="font-medium">{user.name}</div><div className="text-sm text-slate-500">{user.phone || "-"}</div></div>
-                <div className="flex items-center gap-2"><Badge>{user.role}</Badge><Badge tone={user.isActive ? "green" : "red"}>{user.isActive ? "active" : "off"}</Badge><button className="rounded-md border px-2 py-1 text-xs" onClick={() => openEdit(user)}>Edit</button><button className="rounded-md border px-2 py-1 text-xs text-rose-700" onClick={() => deleteStaff.mutate(user.id)}>Delete</button></div>
+                <div className="flex items-center gap-2"><Badge>{user.role}</Badge><Badge tone={user.isActive ? "green" : "red"}>{user.isActive ? "active" : "off"}</Badge><button className="rounded-md border px-2 py-1 text-xs" onClick={() => setEditing(user)}>Edit</button><button className="rounded-md border px-2 py-1 text-xs text-rose-700" onClick={() => deleteStaff.mutate(user.id)}>Delete</button></div>
               </div>
             ))}
           </div>
@@ -84,14 +79,14 @@ export function StaffPage() {
       </div>
       {editing ? (
         <Modal title="Xodimni tahrirlash" onClose={() => setEditing(null)}>
-          <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); updateStaff.mutate(); }}>
-            <input className="w-full rounded-md border px-3 py-2" value={editName} onChange={(event) => setEditName(event.target.value)} />
-            <input className="w-full rounded-md border px-3 py-2" value={editPhone} onChange={(event) => setEditPhone(event.target.value)} />
-            <select className="w-full rounded-md border px-3 py-2" value={editRole} onChange={(event) => setEditRole(event.target.value)}>
-              <option value="MANAGER">MANAGER</option><option value="WAITER">WAITER</option><option value="KITCHEN">KITCHEN</option><option value="CASHIER">CASHIER</option>
+          <form className="space-y-3" onSubmit={editForm.handleSubmit((values) => updateStaff.mutate(values))}>
+            <input className="w-full rounded-md border px-3 py-2" {...editForm.register("name")} />
+            <input className="w-full rounded-md border px-3 py-2" {...editForm.register("phone")} />
+            <select className="w-full rounded-md border px-3 py-2" {...editForm.register("role")}>
+              <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
             </select>
-            <input className="w-full rounded-md border px-3 py-2" placeholder="Yangi PIN" maxLength={4} value={editPin} onChange={(event) => setEditPin(event.target.value)} />
-            <button className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white">Saqlash</button>
+            <input className="w-full rounded-md border px-3 py-2" placeholder="Yangi PIN" maxLength={4} {...editForm.register("pin")} />
+            <button disabled={updateStaff.isPending} className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Saqlash</button>
           </form>
         </Modal>
       ) : null}

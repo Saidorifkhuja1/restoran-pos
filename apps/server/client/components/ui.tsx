@@ -1,16 +1,18 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
+
 export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-4">
       <h1 className="text-2xl font-semibold tracking-normal text-slate-950">{title}</h1>
-      {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
+      {subtitle ? <p className="mt-1 text-sm text-slate-600">{subtitle}</p> : null}
     </div>
   );
 }
 
 export function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-md border border-slate-200 bg-white p-4 shadow-sm ${className || ""}`}>{children}</section>;
+  return <section className={`rounded-md border border-slate-300 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.08)] ${className || ""}`}>{children}</section>;
 }
 
 export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "yellow" | "red" | "blue" }) {
@@ -34,16 +36,21 @@ export function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
-      <section className="w-[min(92vw,520px)] rounded-md border border-slate-200 bg-white p-4 shadow-lg">
+    <Dialog.Root open onOpenChange={(open) => {
+      if (!open) onClose();
+    }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/40" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-md border border-slate-200 bg-white p-4 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button className="rounded-md border px-2 py-1 text-sm" onClick={onClose}>
+          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+          <Dialog.Close className="rounded-md border px-2 py-1 text-sm">
             Yopish
-          </button>
+          </Dialog.Close>
         </div>
         {children}
-      </section>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

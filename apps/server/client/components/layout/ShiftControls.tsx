@@ -31,14 +31,14 @@ export function ShiftControls() {
   if (current.isLoading) return <div className="hidden text-xs text-slate-500 sm:block">Smena...</div>;
 
   return current.data ? (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="hidden text-slate-500 sm:inline">Smena: {new Date(current.data.startedAt).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}</span>
-      <button className="rounded-md border border-rose-200 px-2 py-1 text-rose-700 disabled:opacity-60" disabled={end.isPending} onClick={() => window.confirm("Smena yopilsinmi?") && end.mutate()}>
+    <div className="flex items-center gap-2 text-sm">
+      <span className="hidden text-slate-600 sm:inline">Smena: {new Date(current.data.startedAt).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}</span>
+      <button className="rounded-md border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:opacity-60" disabled={end.isPending} onClick={() => window.confirm("Smena yopilsinmi?") && end.mutate()}>
         Yopish
       </button>
     </div>
   ) : (
-    <button className="rounded-md bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60" disabled={start.isPending} onClick={() => start.mutate()}>
+    <button className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary-contrast)] shadow-sm transition-all active:scale-95 disabled:opacity-60" disabled={start.isPending} onClick={() => start.mutate()}>
       Smena boshlash
     </button>
   );

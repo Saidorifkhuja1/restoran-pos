@@ -31,10 +31,13 @@ yarn-error.log*
 out/
 playwright-report/
 test-results/
+apps/server/public/sw.js
+apps/server/public/workbox-*.js
 
 # Cache
 .eslintcache
 tsconfig.tsbuildinfo
+.data/
 
 # Prisma
 prisma/dev.db
