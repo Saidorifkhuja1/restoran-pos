@@ -6,6 +6,7 @@ import { apiClient, getData, Paginated } from "@/client/api/client";
 import { Badge, PageTitle, Panel } from "@/client/components/ui";
 import { usePusherEvent } from "@/client/hooks/usePusher";
 import { useAuthStore } from "@/client/store/authStore";
+import { dictionary, usePreferencesStore } from "@/client/store/preferencesStore";
 
 type Order = {
   id: string;
@@ -27,6 +28,20 @@ function timerColor(minutes: number): "green" | "yellow" | "red" {
   return "red";
 }
 
+type Translation = (typeof dictionary)[keyof typeof dictionary];
+
+function orderStatusLabel(status: string, t: Translation): string {
+  const labels: Record<string, string> = {
+    OPEN: t.statusOpen,
+    IN_KITCHEN: t.statusInKitchen,
+    READY: t.statusReady,
+    BILL: t.statusBill,
+    PAID: t.statusPaid,
+    CANCELLED: t.statusCancelled,
+  };
+  return labels[status] || status;
+}
+
 const timerBadgeStyles: Record<ReturnType<typeof timerColor>, string> = {
   green: "bg-emerald-100 text-emerald-800 border-emerald-300",
   yellow: "bg-amber-100 text-amber-800 border-amber-300",
@@ -37,10 +52,12 @@ function OrderCard({
   order,
   onMarkDone,
   isMarking,
+  t,
 }: {
   order: Order;
   onMarkDone: (payload: { orderId: string; itemId: string }) => void;
   isMarking: boolean;
+  t: Translation;
 }) {
   const minutes = useMemo(() => getElapsedMinutes(order.sentToKitchenAt), [order.sentToKitchenAt]);
   const color = timerColor(minutes);
@@ -48,12 +65,12 @@ function OrderCard({
   return (
     <Panel className={color === "red" ? "ring-2 ring-red-400" : undefined}>
       <div className="mb-3 flex items-center justify-between">
-        <div className="font-semibold">#{order.orderNumber} · Stol {order.table.number}</div>
+        <div className="font-semibold">#{order.orderNumber} · {t.table} {order.table.number}</div>
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${timerBadgeStyles[color]}`}>
             ⏱ {minutes} daq
           </span>
-          <Badge tone="yellow">{order.status}</Badge>
+          <Badge tone="yellow">{orderStatusLabel(order.status, t)}</Badge>
         </div>
       </div>
       <div className="space-y-2">
@@ -80,6 +97,8 @@ function OrderCard({
 export function KitchenPage() {
   const queryClient = useQueryClient();
   const restaurant = useAuthStore((state) => state.restaurant);
+  const language = usePreferencesStore((state) => state.settings.language);
+  const t = dictionary[language];
   usePusherEvent(restaurant?.id ? `kitchen:${restaurant.id}` : null, "new-order", () => {
     void queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
   });
@@ -106,6 +125,7 @@ export function KitchenPage() {
             order={order}
             onMarkDone={markDone.mutate}
             isMarking={markDone.isPending}
+            t={t}
           />
         ))}
       </div>

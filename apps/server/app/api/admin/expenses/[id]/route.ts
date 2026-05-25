@@ -6,6 +6,7 @@ import { deleteCacheByPattern } from "@/lib/redis";
 import { badRequest, notFound, serverError, success, unauthorized } from "@/lib/responses";
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -44,6 +45,10 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       metadata: parsed.data,
     });
     await deleteCacheByPattern(`reports:${token.restaurantId}:*`);
+    await publishEvent(restaurantChannel(token.restaurantId), "expense:updated", {
+      action: "updated",
+      expense,
+    });
 
     return success(expense);
   } catch (error) {
@@ -72,6 +77,10 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       entityId: params.id,
     });
     await deleteCacheByPattern(`reports:${token.restaurantId}:*`);
+    await publishEvent(restaurantChannel(token.restaurantId), "expense:updated", {
+      action: "deleted",
+      expenseId: params.id,
+    });
 
     return success({ id: params.id });
   } catch (error) {

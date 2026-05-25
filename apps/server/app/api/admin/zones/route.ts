@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success } from "@/lib/responses";
 import { UserToken } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createZoneSchema = z.object({
   name: z.string().min(2, "Zon nomi kamida 2 ta harf bo'lishi kerak"),
@@ -108,6 +109,11 @@ export async function POST(request: NextRequest) {
           select: { tables: true },
         },
       },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "zone:updated", {
+      action: "created",
+      zone,
     });
 
     return success(zone, 201);

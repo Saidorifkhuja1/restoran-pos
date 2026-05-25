@@ -117,10 +117,13 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
-    await publishEvent(restaurantChannel(token.restaurantId), "table:status", {
-      tableId: reservation.tableId,
-      status: "RESERVED",
-    });
+    await Promise.all([
+      publishEvent(restaurantChannel(token.restaurantId), "reservation:created", reservation),
+      publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+        tableId: reservation.tableId,
+        status: "RESERVED",
+      }),
+    ]);
 
     return success(reservation, 201);
   } catch (error) {

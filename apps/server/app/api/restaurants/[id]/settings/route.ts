@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound, serverError, success, unauthorized } from "@/lib/responses";
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -63,6 +64,8 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       create: { restaurantId: token.restaurantId, ...parsed.data },
       update: parsed.data,
     });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "settings:updated", settings);
 
     return success(settings);
   } catch (error) {

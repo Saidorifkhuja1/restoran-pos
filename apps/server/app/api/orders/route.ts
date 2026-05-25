@@ -39,11 +39,15 @@ export async function GET(request: NextRequest) {
     if (!parsedStatus.success) return badRequest(zodMessage(parsedStatus.error));
     const status = parsedStatus.data;
     const tableId = searchParams.get("tableId") || undefined;
+    const active = searchParams.get("active") === "true";
+    const scope = searchParams.get("scope");
     const { page, limit, skip } = getPagination(request);
+    const shouldLimitToWaiter = token.role === UserRole.WAITER && scope !== "restaurant";
     const where: Prisma.OrderWhereInput = {
       restaurantId: token.restaurantId,
-      ...(status ? { status } : {}),
+      ...(active ? { status: { notIn: ["PAID", "CANCELLED"] } } : status ? { status } : {}),
       ...(tableId ? { tableId } : {}),
+      ...(shouldLimitToWaiter ? { waiterId: token.userId } : {}),
     };
 
     const [items, total] = await Promise.all([
@@ -62,7 +66,7 @@ export async function GET(request: NextRequest) {
           readyAt: true,
           billedAt: true,
           paidAt: true,
-          table: { select: { id: true, number: true, status: true } },
+          table: { select: { id: true, number: true, status: true, zone: { select: { id: true, name: true } } } },
           waiter: { select: { id: true, name: true } },
           items: {
             select: {
@@ -103,7 +107,7 @@ export async function POST(request: NextRequest) {
       select: { id: true, status: true },
     });
     if (!table) return badRequest("Stol topilmadi");
-    if (table.status === "BILL_REQUESTED") return forbidden("Bu stol uchun hisob so'ralgan");
+    if (table.status !== "FREE") return forbidden("Bu joy band. To'lov qilinmaguncha yangi chek ochib bo'lmaydi");
 
     const menuItems = await prisma.menuItem.findMany({
       where: {

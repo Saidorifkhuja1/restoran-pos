@@ -11,9 +11,29 @@ export type AuthContext = {
 };
 
 export async function getAuthContext(request: NextRequest): Promise<AuthContext> {
+  // 1. Try cookie-based JWT first (primary, always reliable)
+  const rawToken = extractToken(
+    request.headers.get("authorization"),
+    request.cookies.get("restopos-token")?.value
+  );
+
+  if (rawToken) {
+    const payload = await verifyToken(rawToken);
+    if (payload) {
+      return {
+        token: payload,
+        isAuthenticated: true,
+        isSuperAdmin: payload.role === "SUPERADMIN",
+        isRestaurantUser: payload.role !== "SUPERADMIN",
+      };
+    }
+  }
+
+  // 2. Fall back to NextAuth session (secondary, may not be set)
   const session = await nextAuthSession().catch(() => null);
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + 60 * 60 * 24;
+  const exp = now + 86_400;
+
   if (session?.user?.role === "SUPERADMIN" && session.user.id) {
     return {
       token: { role: "SUPERADMIN", superAdminId: session.user.id, iat: now, exp },
@@ -22,6 +42,7 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext>
       isRestaurantUser: false,
     };
   }
+
   if (session?.user?.role && session.user.id && session.user.restaurantId) {
     return {
       token: {
@@ -37,81 +58,35 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext>
     };
   }
 
-  const token = extractToken(
-    request.headers.get("authorization") || "",
-    request.cookies.get("restopos-token")?.value
-  );
-
-  if (!token) {
-    return {
-      token: null,
-      isAuthenticated: false,
-      isSuperAdmin: false,
-      isRestaurantUser: false,
-    };
-  }
-
-  const payload = await verifyToken(token);
-
-  if (!payload) {
-    return {
-      token: null,
-      isAuthenticated: false,
-      isSuperAdmin: false,
-      isRestaurantUser: false,
-    };
-  }
-
-  const isSuperAdmin = payload.role === "SUPERADMIN";
-  const isRestaurantUser = payload.role !== "SUPERADMIN";
-
-  return {
-    token: payload,
-    isAuthenticated: true,
-    isSuperAdmin,
-    isRestaurantUser,
-  };
+  return { token: null, isAuthenticated: false, isSuperAdmin: false, isRestaurantUser: false };
 }
 
-export function unauthorized(message: string = "Unauthorized") {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 401 }
-  );
+// --- Response helpers ---
+
+type ErrorBody = { success: false; error: string };
+type SuccessBody<T> = { success: true; data: T };
+
+export function unauthorized(message = "Unauthorized") {
+  return NextResponse.json<ErrorBody>({ success: false, error: message }, { status: 401 });
 }
 
-export function forbidden(message: string = "Forbidden") {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 403 }
-  );
+export function forbidden(message = "Forbidden") {
+  return NextResponse.json<ErrorBody>({ success: false, error: message }, { status: 403 });
 }
 
-export function badRequest(message: string = "Bad Request") {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 400 }
-  );
+export function badRequest(message = "Bad Request") {
+  return NextResponse.json<ErrorBody>({ success: false, error: message }, { status: 400 });
 }
 
-export function notFound(message: string = "Not Found") {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 404 }
-  );
+export function notFound(message = "Not Found") {
+  return NextResponse.json<ErrorBody>({ success: false, error: message }, { status: 404 });
 }
 
-export function serverError(message: string = "Internal Server Error") {
+export function serverError(message = "Internal Server Error") {
   console.error("[API Error]", message);
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 500 }
-  );
+  return NextResponse.json<ErrorBody>({ success: false, error: message }, { status: 500 });
 }
 
-export function success<T>(data: T, status: number = 200) {
-  return NextResponse.json(
-    { success: true, data },
-    { status }
-  );
+export function success<T>(data: T, status = 200) {
+  return NextResponse.json<SuccessBody<T>>({ success: true, data }, { status });
 }

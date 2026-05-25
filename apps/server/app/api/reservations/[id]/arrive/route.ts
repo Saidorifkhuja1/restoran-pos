@@ -58,6 +58,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     await Promise.all([
       publishEvent(restaurantChannel(token.restaurantId), "order:created", order),
+      publishEvent(restaurantChannel(token.restaurantId), "reservation:updated", {
+        id: params.id,
+        status: "ARRIVED",
+        orderId: order.id,
+      }),
       publishEvent(restaurantChannel(token.restaurantId), "table:status", {
         tableId: order.tableId,
         status: "OCCUPIED",

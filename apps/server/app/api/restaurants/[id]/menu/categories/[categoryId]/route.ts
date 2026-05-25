@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 import { badRequest, forbidden, notFound, serverError, success, unauthorized } from "@/lib/responses";
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
@@ -38,6 +39,11 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       select: { id: true, name: true, emoji: true, sortOrder: true, isActive: true },
     });
 
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "category:updated",
+      category,
+    });
+
     return success(category);
   } catch (error) {
     console.error("[Update Menu Category Error]", error);
@@ -62,6 +68,11 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       where: { id: params.categoryId },
       data: { isActive: false, items: { updateMany: { where: {}, data: { isActive: false } } } },
       select: { id: true, isActive: true },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "category:deleted",
+      categoryId: updated.id,
     });
 
     return success(updated);

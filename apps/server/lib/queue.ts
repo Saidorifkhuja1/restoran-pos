@@ -1,4 +1,4 @@
-import { Queue, Worker, JobsOptions } from "bullmq";
+import { Queue, Worker, type JobsOptions } from "bullmq";
 import type { RedisOptions } from "ioredis";
 
 export type ReportJobData = {
@@ -10,14 +10,8 @@ export type ReportJobData = {
   format: "csv" | "xlsx" | "pdf";
 };
 
+const QUEUE_NAME = "reports" as const;
 const redisUrl = process.env.REDIS_URL;
-
-function connection(): RedisOptions {
-  if (!redisUrl) {
-    return { host: "127.0.0.1", port: 6379 };
-  }
-  return { lazyConnect: true, ...parseRedisUrl(redisUrl) };
-}
 
 function parseRedisUrl(url: string): RedisOptions {
   const parsed = new URL(url);
@@ -30,13 +24,20 @@ function parseRedisUrl(url: string): RedisOptions {
   };
 }
 
+function connection(): RedisOptions {
+  if (!redisUrl) {
+    return { host: "127.0.0.1", port: 6379 };
+  }
+  return { lazyConnect: true, ...parseRedisUrl(redisUrl) };
+}
+
 let reportQueue: Queue<ReportJobData> | null = null;
 
 function getReportQueue(): Queue<ReportJobData> {
   if (!redisUrl) {
-    throw new Error("REDIS_URL sozlanmagan");
+    throw new Error("REDIS_URL sozlanmagan — queue ishlamaydi");
   }
-  reportQueue ??= new Queue<ReportJobData>("reports", {
+  reportQueue ??= new Queue<ReportJobData>(QUEUE_NAME, {
     connection: connection(),
     defaultJobOptions: {
       attempts: 3,
@@ -59,11 +60,11 @@ export function createReportWorker(
   processor: (data: ReportJobData) => Promise<void>
 ) {
   if (!redisUrl) {
-    throw new Error("REDIS_URL sozlanmagan");
+    throw new Error("REDIS_URL sozlanmagan — worker ishlamaydi");
   }
   return new Worker<ReportJobData>(
-    "reports",
+    QUEUE_NAME,
     async (job) => processor(job.data),
-    { connection: connection() }
+    { connection: connection(), concurrency: 2 }
   );
 }

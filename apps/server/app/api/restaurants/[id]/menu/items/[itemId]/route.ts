@@ -5,6 +5,7 @@ import { badRequest, forbidden, notFound, serverError, success, unauthorized } f
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
 import { writeAuditLog } from "@/lib/audit";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
@@ -14,7 +15,7 @@ const updateSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   price: z.number().int().positive().optional(),
   emoji: z.string().max(8).nullable().optional(),
-  image: z.string().url().nullable().optional(),
+  image: z.string().nullable().optional(),
   preparationTime: z.number().int().positive().nullable().optional(),
   isActive: z.boolean().optional(),
   isAvailable: z.boolean().optional(),
@@ -103,6 +104,11 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       metadata: { name: item.name, price: item.price, isActive: item.isActive, isAvailable: item.isAvailable },
     });
 
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "item:updated",
+      item,
+    });
+
     return success(item);
   } catch (error) {
     console.error("[Update Menu Item Error]", error);
@@ -134,6 +140,11 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       action: "DELETE",
       entity: "MenuItem",
       entityId: item.id,
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "item:deleted",
+      itemId: item.id,
     });
 
     return success(item);

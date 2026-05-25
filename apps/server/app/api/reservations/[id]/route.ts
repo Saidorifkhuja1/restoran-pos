@@ -82,16 +82,22 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       },
     });
 
+    const events = [
+      publishEvent(restaurantChannel(token.restaurantId), "reservation:updated", reservation),
+    ];
     if (parsed.data.status === "CANCELLED" || parsed.data.status === "NO_SHOW") {
       await prisma.table.update({
         where: { id: existing.tableId },
         data: { status: "FREE" },
       });
-      await publishEvent(restaurantChannel(token.restaurantId), "table:status", {
-        tableId: existing.tableId,
-        status: "FREE",
-      });
+      events.push(
+        publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+          tableId: existing.tableId,
+          status: "FREE",
+        })
+      );
     }
+    await Promise.all(events);
 
     return success(reservation);
   } catch (error) {
@@ -123,10 +129,13 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       where: { id: reservation.tableId },
       data: { status: "FREE" },
     });
-    await publishEvent(restaurantChannel(token.restaurantId), "table:status", {
-      tableId: reservation.tableId,
-      status: "FREE",
-    });
+    await Promise.all([
+      publishEvent(restaurantChannel(token.restaurantId), "reservation:deleted", updated),
+      publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+        tableId: reservation.tableId,
+        status: "FREE",
+      }),
+    ]);
 
     return success(updated);
   } catch (error) {

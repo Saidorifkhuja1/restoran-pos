@@ -50,26 +50,30 @@ const nextAuth = NextAuth({
         const staffParsed = staffCredentialsSchema.safeParse(credentials);
         if (!staffParsed.success) return null;
 
+        // Hash the incoming PIN and use DB unique index lookup
+        // Since PIN is stored as bcrypt hash, we need to compare against candidates.
+        // Optimize: use findFirst with unique constraint on (restaurantId, pin) — but pin
+        // is hashed. So we still need to iterate, but limit to active users only and
+        // short-circuit on first match.
         const users = await prisma.user.findMany({
           where: { restaurantId: staffParsed.data.restaurantId, isActive: true },
           select: { id: true, name: true, role: true, pin: true, restaurantId: true },
         });
-        const user = (
-          await Promise.all(
-            users.map(async (candidate) => ({
-              candidate,
-              matches: await bcrypt.compare(staffParsed.data.pin, candidate.pin),
-            }))
-          )
-        ).find(({ matches }) => matches)?.candidate;
-        if (!user) return null;
 
-        return {
-          id: user.id,
-          name: user.name,
-          role: user.role,
-          restaurantId: user.restaurantId,
-        };
+        // Sequential comparison with early exit (more efficient than parallel for small sets)
+        for (const candidate of users) {
+          const matches = await bcrypt.compare(staffParsed.data.pin, candidate.pin);
+          if (matches) {
+            return {
+              id: candidate.id,
+              name: candidate.name,
+              role: candidate.role,
+              restaurantId: candidate.restaurantId,
+            };
+          }
+        }
+
+        return null;
       },
     }),
   ],
@@ -84,7 +88,7 @@ const nextAuth = NextAuth({
     session({ session, token }) {
       session.user = {
         ...session.user,
-        id: token.sub || "",
+        id: token.sub ?? "",
         role: token.role as string,
         restaurantId: token.restaurantId as string | undefined,
       };
@@ -94,6 +98,7 @@ const nextAuth = NextAuth({
 });
 
 export const handlers = nextAuth.handlers;
+
 export async function auth(): Promise<Session | null> {
   return nextAuth.auth();
 }

@@ -6,6 +6,7 @@ import { getAuthContext, unauthorized, forbidden, badRequest, serverError, succe
 import { UserToken } from "@restopos/types";
 import { zodMessage } from "@/lib/route-helpers";
 import { writeAuditLog } from "@/lib/audit";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = {
   params: Promise<{
@@ -17,7 +18,7 @@ const updateStaffSchema = z.object({
   name: z.string().min(2).optional(),
   phone: z.string().optional(),
   role: z.enum(["MANAGER", "WAITER", "KITCHEN", "CASHIER"]).optional(),
-  newPin: z.string().length(4).regex(/^\d+$/).optional(),
+  newPin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -104,6 +105,9 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     if (existingUser.restaurantId !== token.restaurantId) {
       return forbidden("Boshqa restoran xodimini tahrirlaya olmaysiz");
     }
+    if (existingUser.role === "ADMIN") {
+      return forbidden("Admin profilini faqat sozlamalar bo'limida o'zi tahrirlaydi");
+    }
 
     const body = await request.json();
     const parseResult = updateStaffSchema.safeParse(body);
@@ -174,6 +178,11 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       metadata: { name: updated.name, role: updated.role, isActive: updated.isActive },
     });
 
+    await publishEvent(restaurantChannel(token.restaurantId), "staff:updated", {
+      action: "updated",
+      user: updated,
+    });
+
     return success(updated);
   } catch (error) {
     console.error("[Update Staff Error]", error);
@@ -213,6 +222,9 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (existingUser.restaurantId !== token.restaurantId) {
       return forbidden("Boshqa restoran xodimini o'chira olmaysiz");
     }
+    if (existingUser.role === "ADMIN") {
+      return forbidden("Adminlarni restoran admin panelidan o'chirish mumkin emas");
+    }
 
     // Soft delete
     const updated = await prisma.user.update({
@@ -231,6 +243,11 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
       entity: "User",
       entityId: updated.id,
       metadata: { name: updated.name },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "staff:updated", {
+      action: "deleted",
+      user: updated,
     });
 
     return success({

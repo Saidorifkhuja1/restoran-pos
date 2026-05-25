@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success, notFound } from "@/lib/responses";
 import { UserToken } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = {
   params: Promise<{
@@ -152,6 +153,11 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       },
     });
 
+    await publishEvent(restaurantChannel(token.restaurantId), "discount:updated", {
+      action: "updated",
+      discount: updated,
+    });
+
     return success(updated);
   } catch (error) {
     console.error("[Update Discount Error]", error);
@@ -196,6 +202,11 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     const updated = await prisma.discount.update({
       where: { id: params.id },
       data: { isActive: false },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "discount:updated", {
+      action: "deleted",
+      discount: updated,
     });
 
     return success({

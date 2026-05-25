@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 import { badRequest, forbidden, serverError, success, unauthorized } from "@/lib/responses";
 import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
@@ -72,6 +73,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
         isActive: true,
         createdAt: true,
       },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "category:created",
+      category,
     });
 
     return success(category, 201);

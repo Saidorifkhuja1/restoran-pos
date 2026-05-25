@@ -12,7 +12,12 @@ type RouteParams = { params: Promise<{ id: string }> };
 const adminSchema = z.object({
   name: z.string().min(2).max(120),
   phone: z.string().max(40).optional(),
-  pin: z.string().length(4).regex(/^\d+$/),
+  pin: z.string()
+    .min(8, "Parol kamida 8 ta belgi bo'lishi kerak")
+    .regex(/[A-Z]/, "Parolda katta harf bo'lishi kerak")
+    .regex(/[a-z]/, "Parolda kichik harf bo'lishi kerak")
+    .regex(/\d/, "Parolda raqam bo'lishi kerak")
+    .regex(/[^A-Za-z0-9]/, "Parolda maxsus belgi bo'lishi kerak"),
 });
 
 export async function GET(request: NextRequest, context: RouteParams) {
@@ -61,7 +66,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
         }))
       )
     ).find(({ matches }) => matches)?.user;
-    if (pinExists) return badRequest("Bu PIN allaqachon ishlatilgan");
+    if (pinExists) return badRequest("Bu parol allaqachon ishlatilgan");
 
     const admin = await prisma.user.create({
       data: {

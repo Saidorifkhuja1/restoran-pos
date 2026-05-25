@@ -5,6 +5,7 @@ import { badRequest, forbidden, serverError, success, unauthorized } from "@/lib
 import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
 import { writeAuditLog } from "@/lib/audit";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -14,9 +15,9 @@ const menuItemSchema = z.object({
   categoryId: z.string().min(1),
   name: z.string().min(2).max(120),
   description: z.string().max(500).optional(),
-  price: z.number().int().positive(),
+  price: z.number().int().positive().max(2_000_000_000, "Narx juda katta"),
   emoji: z.string().max(8).optional(),
-  image: z.string().url().optional(),
+  image: z.string().optional(),
   preparationTime: z.number().int().positive().optional(),
   isActive: z.boolean().default(true),
   isAvailable: z.boolean().default(true),
@@ -98,7 +99,29 @@ export async function POST(request: NextRequest, context: RouteParams) {
         isAvailable: true,
         createdAt: true,
       },
+    }).catch(async (err) => {
+      if (err?.code === "P2002") {
+        // If an inactive item with same name exists, reactivate it with new data
+        const existing = await prisma.menuItem.findFirst({
+          where: { restaurantId: token.restaurantId, name: parsed.data.name, isActive: false },
+        });
+        if (existing) {
+          return prisma.menuItem.update({
+            where: { id: existing.id },
+            data: { ...parsed.data, isActive: true, isAvailable: true },
+            select: {
+              id: true, categoryId: true, name: true, description: true,
+              price: true, emoji: true, image: true, preparationTime: true,
+              isActive: true, isAvailable: true, createdAt: true,
+            },
+          });
+        }
+        return null;
+      }
+      throw err;
     });
+
+    if (!item) return badRequest("Bu nomli taom allaqachon mavjud");
 
     await writeAuditLog(request, {
       restaurantId: token.restaurantId,
@@ -106,6 +129,11 @@ export async function POST(request: NextRequest, context: RouteParams) {
       entity: "MenuItem",
       entityId: item.id,
       metadata: { name: item.name, price: item.price },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "menu:updated", {
+      action: "item:created",
+      item,
     });
 
     return success(item, 201);

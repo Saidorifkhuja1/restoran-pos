@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import { Globe, Moon, Sun } from "lucide-react";
-import { apiClient, getData, Paginated } from "@/client/api/client";
+import { apiClient } from "@/client/api/client";
 import { ShiftControls } from "@/client/components/layout/ShiftControls";
 import { useRealtimeInvalidation } from "@/client/hooks/useRealtimeInvalidation";
 import { useAuthStore, AuthRole } from "@/client/store/authStore";
@@ -13,20 +12,7 @@ import { dictionary, Language, usePreferencesStore } from "@/client/store/prefer
 import { UserRole } from "@restopos/types";
 
 type NavLink = { to: string; label: string; roles: AuthRole[] };
-type ProfilePanel = "profile" | "shifts" | null;
-type Shift = { id: string; startedAt: string; endedAt?: string | null; totalSales: number; totalOrders: number; isActive: boolean };
-type ShiftReceipt = {
-  id: string;
-  receiptNumber?: string | null;
-  method: string;
-  totalAmount: number;
-  paidAt: string;
-  order: {
-    orderNumber: number;
-    table: { number: number };
-    items: { id: string; name: string; quantity: number; price: number }[];
-  };
-};
+type ProfilePanel = "profile" | null;
 
 const links: NavLink[] = [
   { to: "/tables", label: "Stollar", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] },
@@ -53,42 +39,42 @@ const languageOptions: { value: Language; label: string }[] = [
 export function AppShell({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, hydrated } = useAuthStore();
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState<"language" | null>(null);
   const [profilePanel, setProfilePanel] = useState<ProfilePanel>(null);
-  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const { settings, updateSettings } = usePreferencesStore();
   const { language, themeMode } = settings;
   const t = dictionary[language];
+  const [resolvedDark, setResolvedDark] = useState(false);
   useRealtimeInvalidation();
   const visibleLinks = user?.role === UserRole.WAITER ? [] : links.filter((link) => user && link.roles.includes(user.role));
   const hideSidebar = user?.role === UserRole.WAITER;
+  useEffect(() => {
+    if (user?.role === "SUPERADMIN") {
+      router.replace("/superadmin/dashboard");
+    }
+  }, [router, user?.role]);
+  useEffect(() => {
+    if (hydrated && !user) {
+      router.replace("/login");
+    }
+  }, [hydrated, router, user]);
   async function handleLogout() {
     await apiClient.post("/auth/logout").catch(() => undefined);
     logout();
     setProfileOpen(false);
     setSettingsOpen(null);
     setProfilePanel(null);
+    router.replace("/login");
+    router.refresh();
   }
-  const shifts = useQuery({
-    queryKey: ["my-shifts"],
-    enabled: profilePanel === "shifts",
-    queryFn: () => getData<Paginated<Shift>>("/shifts?limit=30"),
-  });
-  const receipts = useQuery({
-    queryKey: ["shift-receipts", selectedShiftId],
-    enabled: profilePanel === "shifts" && Boolean(selectedShiftId),
-    queryFn: () => getData<ShiftReceipt[]>(`/shifts/${selectedShiftId}/receipts`),
-  });
   function openPanel(panel: Exclude<ProfilePanel, null>) {
     setProfilePanel(panel);
     setProfileOpen(false);
-    if (panel === "shifts") setSelectedShiftId(null);
   }
   function closePanel() {
     setProfilePanel(null);
-    setSelectedShiftId(null);
   }
   function handleBack() {
     if (window.history.length > 1) router.back();
@@ -97,11 +83,22 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   const showBackButton = pathname !== "/tables";
   useEffect(() => {
     if (themeMode === "auto") {
-      document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setResolvedDark(isDark);
+      document.documentElement.classList.toggle("dark", isDark);
       return;
     }
+    setResolvedDark(themeMode === "dark");
     document.documentElement.classList.toggle("dark", themeMode === "dark");
   }, [themeMode]);
+
+  if (!hydrated) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#050916] text-white">
+        <div className="text-sm font-bold text-slate-300">Yuklanmoqda...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
@@ -148,12 +145,12 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
               className={iconButtonClass}
               aria-label="Theme"
               onClick={() => {
-                updateSettings({ themeMode: themeMode === "dark" ? "light" : "dark" });
+                updateSettings({ themeMode: resolvedDark ? "light" : "dark" });
                 setSettingsOpen(null);
                 setProfileOpen(false);
               }}
             >
-              {themeMode === "dark" ? <Sun size={20} strokeWidth={2.6} /> : <Moon size={20} strokeWidth={2.6} />}
+              {resolvedDark ? <Sun size={20} strokeWidth={2.6} /> : <Moon size={20} strokeWidth={2.6} />}
             </button>
             <button
               className={iconButtonClass}
@@ -184,7 +181,10 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
                 <button className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => openPanel("profile")}>
                   {t.profile}
                 </button>
-                <button className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => openPanel("shifts")}>
+                <button className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => {
+                  setProfileOpen(false);
+                  router.push("/shifts");
+                }}>
                   {t.shifts}
                 </button>
                 <button className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50" onClick={handleLogout}>
@@ -222,52 +222,16 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       </div>
       {profilePanel ? (
         <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/40 p-4">
-          <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-md bg-white p-4 shadow-xl">
+          <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-text)] shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-lg font-semibold">{profilePanel === "profile" ? t.profile : selectedShiftId ? t.receipts : t.shifts}</div>
-              <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-lg" aria-label="Yopish" onClick={closePanel}>×</button>
+              <div className="text-lg font-semibold">{t.profile}</div>
+              <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-lg text-[var(--color-text)]" aria-label="Yopish" onClick={closePanel}>×</button>
             </div>
             {profilePanel === "profile" ? (
               <div className="space-y-3 text-sm">
-                <div className="rounded-md border border-slate-200 p-3"><div className="text-xs text-slate-500">{t.name}</div><div className="font-medium">{user?.name}</div></div>
-                <div className="rounded-md border border-slate-200 p-3"><div className="text-xs text-slate-500">{t.role}</div><div className="font-medium">{user?.role}</div></div>
-                <div className="rounded-md border border-slate-200 p-3"><div className="text-xs text-slate-500">{t.phone}</div><div className="font-medium">{user?.phone || "-"}</div></div>
-              </div>
-            ) : null}
-            {profilePanel === "shifts" && !selectedShiftId ? (
-              <div className="space-y-2">
-                {shifts.isLoading ? <div className="text-sm text-slate-500">{t.loading}</div> : null}
-                {shifts.data?.items.map((shift) => (
-                  <button key={shift.id} className="block w-full rounded-md border border-slate-200 p-3 text-left hover:border-teal-300 hover:bg-teal-50" onClick={() => setSelectedShiftId(shift.id)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium">{new Date(shift.startedAt).toLocaleString("uz-UZ")}</div>
-                      <span className={`rounded-full px-2 py-1 text-xs ${shift.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{shift.isActive ? t.active : t.closed}</span>
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">{t.sales}: {shift.totalSales.toLocaleString("uz-UZ")} UZS · {t.orders}: {shift.totalOrders}</div>
-                  </button>
-                ))}
-                {shifts.data?.items.length === 0 ? <div className="text-sm text-slate-500">{t.noShift}</div> : null}
-              </div>
-            ) : null}
-            {profilePanel === "shifts" && selectedShiftId ? (
-              <div>
-                <button className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-lg" aria-label="Smenalarga qaytish" onClick={() => setSelectedShiftId(null)}>←</button>
-                <div className="space-y-2">
-                  {receipts.isLoading ? <div className="text-sm text-slate-500">{t.loading}</div> : null}
-                  {receipts.data?.map((receipt) => (
-                    <div key={receipt.id} className="rounded-md border border-slate-200 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium">{receipt.receiptNumber || `#${receipt.order.orderNumber}`}</div>
-                        <div className="text-sm font-semibold">{receipt.totalAmount.toLocaleString("uz-UZ")} UZS</div>
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">{t.table} {receipt.order.table.number} · {receipt.method} · {new Date(receipt.paidAt).toLocaleString("uz-UZ")}</div>
-                      <div className="mt-2 space-y-1 text-sm">
-                        {receipt.order.items.map((item) => <div className="flex justify-between gap-3" key={item.id}><span>{item.name} x{item.quantity}</span><span>{(item.price * item.quantity).toLocaleString("uz-UZ")}</span></div>)}
-                      </div>
-                    </div>
-                  ))}
-                  {receipts.data?.length === 0 ? <div className="text-sm text-slate-500">{t.noReceipts}</div> : null}
-                </div>
+                <div className="rounded-md border border-[var(--color-border)] p-3"><div className="text-xs text-[var(--color-muted)]">{t.name}</div><div className="font-medium">{user?.name}</div></div>
+                <div className="rounded-md border border-[var(--color-border)] p-3"><div className="text-xs text-[var(--color-muted)]">{t.role}</div><div className="font-medium">{user?.role}</div></div>
+                <div className="rounded-md border border-[var(--color-border)] p-3"><div className="text-xs text-[var(--color-muted)]">{t.phone}</div><div className="font-medium">{user?.phone || "-"}</div></div>
               </div>
             ) : null}
           </div>

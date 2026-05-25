@@ -6,6 +6,7 @@ import { deleteCacheByPattern } from "@/lib/redis";
 import { badRequest, forbidden, serverError, success, unauthorized } from "@/lib/responses";
 import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const roles = [UserRole.ADMIN, UserRole.MANAGER] as const;
 
@@ -13,6 +14,7 @@ const expenseSchema = z.object({
   name: z.string().min(2).max(120),
   amount: z.number().int().positive(),
   note: z.string().max(500).optional(),
+  supplierId: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
           note: true,
           createdAt: true,
           user: { select: { id: true, name: true, role: true } },
+          supplier: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -62,8 +65,9 @@ export async function POST(request: NextRequest) {
         name: parsed.data.name,
         amount: parsed.data.amount,
         note: parsed.data.note,
+        supplierId: parsed.data.supplierId || undefined,
       },
-      select: { id: true, name: true, amount: true, note: true, createdAt: true },
+      select: { id: true, name: true, amount: true, note: true, createdAt: true, supplier: { select: { name: true } } },
     });
 
     await writeAuditLog(request, {
@@ -74,6 +78,10 @@ export async function POST(request: NextRequest) {
       metadata: { name: expense.name, amount: expense.amount },
     });
     await deleteCacheByPattern(`reports:${token.restaurantId}:*`);
+    await publishEvent(restaurantChannel(token.restaurantId), "expense:updated", {
+      action: "created",
+      expense,
+    });
 
     return success(expense, 201);
   } catch (error) {

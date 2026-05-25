@@ -3,17 +3,11 @@ import Pusher from "pusher";
 const appId = process.env.PUSHER_APP_ID;
 const key = process.env.PUSHER_KEY;
 const secret = process.env.PUSHER_SECRET;
-const cluster = process.env.PUSHER_CLUSTER || "ap1";
+const cluster = process.env.PUSHER_CLUSTER ?? "ap1";
 
-export const pusher =
+export const pusher: Pusher | null =
   appId && key && secret
-    ? new Pusher({
-        appId,
-        key,
-        secret,
-        cluster,
-        useTLS: true,
-      })
+    ? new Pusher({ appId, key, secret, cluster, useTLS: true })
     : null;
 
 export async function publishEvent<T>(
@@ -21,11 +15,13 @@ export async function publishEvent<T>(
   event: string,
   payload: T
 ): Promise<void> {
-  if (!pusher) {
-    return;
-  }
+  if (!pusher) return;
 
-  await pusher.trigger(channel, event, payload);
+  try {
+    await pusher.trigger(channel, event, payload);
+  } catch (error) {
+    console.error("[Pusher Error]", event, error);
+  }
 }
 
 export function restaurantChannel(restaurantId: string): string {

@@ -42,6 +42,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
         id: true,
         tableId: true,
         status: true,
+        waiterId: true,
         items: { select: { price: true, quantity: true, status: true } },
         restaurant: { select: { taxPercent: true } },
         payment: { select: { id: true } },
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
         data: { status: "FREE", currentOrderId: null },
       });
       await tx.shift.updateMany({
-        where: { restaurantId: token.restaurantId, userId: token.userId, isActive: true },
+        where: { restaurantId: token.restaurantId, userId: order.waiterId, isActive: true },
         data: { totalSales: { increment: totalAmount }, totalOrders: { increment: 1 } },
       });
 
@@ -163,6 +164,12 @@ export async function POST(request: NextRequest, context: RouteParams) {
       publishEvent(restaurantChannel(token.restaurantId), "order:updated", {
         orderId: order.id,
         status: "PAID",
+      }),
+      publishEvent(restaurantChannel(token.restaurantId), "shift:updated", {
+        action: "payment",
+        orderId: order.id,
+        waiterId: order.waiterId,
+        payment,
       }),
       publishEvent(restaurantChannel(token.restaurantId), "table:status", {
         tableId: order.tableId,

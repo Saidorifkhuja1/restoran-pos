@@ -1,20 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import Pusher from "pusher-js";
 
-// Singleton Pusher instance — prevents creating a new WebSocket per hook call
 let pusherInstance: Pusher | null = null;
 let subscriberCount = 0;
 
 function getPusherInstance(): Pusher | null {
   const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
-  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "ap1";
+  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? "ap1";
   if (!key) return null;
 
-  if (!pusherInstance) {
-    pusherInstance = new Pusher(key, { cluster });
-  }
+  pusherInstance ??= new Pusher(key, { cluster });
   return pusherInstance;
 }
 
@@ -27,20 +24,13 @@ function releasePusherInstance(): void {
   }
 }
 
-type EventHandler<T> = (payload: T) => void;
-
-export function usePusherEvent<T>(
+export function usePusherEvent<T = unknown>(
   channelName: string | null | undefined,
   eventName: string,
-  handler: EventHandler<T>
+  handler: (payload: T) => void
 ) {
-  // Stabilise handler reference to prevent re-subscriptions on every render
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
-
-  const stableHandler = useCallback((payload: T) => {
-    handlerRef.current(payload);
-  }, []);
 
   useEffect(() => {
     if (!channelName) return undefined;
@@ -50,12 +40,14 @@ export function usePusherEvent<T>(
 
     subscriberCount += 1;
     const channel = pusher.subscribe(channelName);
-    channel.bind(eventName, stableHandler);
+
+    const listener = (payload: T) => handlerRef.current(payload);
+    channel.bind(eventName, listener);
 
     return () => {
-      channel.unbind(eventName, stableHandler);
+      channel.unbind(eventName, listener);
       pusher.unsubscribe(channelName);
       releasePusherInstance();
     };
-  }, [channelName, eventName, stableHandler]);
+  }, [channelName, eventName]);
 }

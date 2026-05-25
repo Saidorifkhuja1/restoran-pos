@@ -6,11 +6,12 @@ import { getAuthContext, unauthorized, forbidden, badRequest, serverError, succe
 import { UserToken } from "@restopos/types";
 import { zodMessage } from "@/lib/route-helpers";
 import { writeAuditLog } from "@/lib/audit";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createStaffSchema = z.object({
   name: z.string().min(2, "Nom kamida 2 ta harf bo'lishi kerak"),
   phone: z.string().optional(),
-  pin: z.string().length(4, "PIN 4 raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat"),
+  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat"),
   role: z.enum(["MANAGER", "WAITER", "KITCHEN", "CASHIER"], {
     errorMap: () => ({ message: "Noto'g'ri rol" }),
   }),
@@ -154,6 +155,11 @@ export async function POST(request: NextRequest) {
       entity: "User",
       entityId: user.id,
       metadata: { name: user.name, role: user.role },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "staff:updated", {
+      action: "created",
+      user,
     });
 
     return success(user, 201);

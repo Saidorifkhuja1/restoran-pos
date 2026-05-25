@@ -14,6 +14,7 @@ const updateRestaurantSchema = z.object({
   type: z.string().optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
+  taxId: z.string().optional(),
   taxPercent: z.number().min(0).max(100).optional(),
   receiptFooter: z.string().optional(),
 });

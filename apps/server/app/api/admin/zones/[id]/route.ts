@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success, notFound } from "@/lib/responses";
 import { UserToken } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = {
   params: Promise<{
@@ -140,6 +141,11 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       },
     });
 
+    await publishEvent(restaurantChannel(token.restaurantId), "zone:updated", {
+      action: "updated",
+      zone: updated,
+    });
+
     return success(updated);
   } catch (error) {
     console.error("[Update Zone Error]", error);
@@ -195,6 +201,11 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     const updated = await prisma.zone.update({
       where: { id: params.id },
       data: { isActive: false },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "zone:updated", {
+      action: "deleted",
+      zone: updated,
     });
 
     return success({

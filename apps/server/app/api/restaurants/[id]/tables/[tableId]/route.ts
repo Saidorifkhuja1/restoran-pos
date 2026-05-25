@@ -112,6 +112,10 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (table.status !== "FREE") return forbidden("Band stolni o'chirib bo'lmaydi");
 
     await prisma.table.delete({ where: { id: params.tableId } });
+    await publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+      tableId: params.tableId,
+      deleted: true,
+    });
     return success({ id: params.tableId });
   } catch (error) {
     console.error("[Delete Table Error]", error);

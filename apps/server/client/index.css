@@ -7,9 +7,9 @@
   --color-surface: #ffffff;
   --color-surface2: #f2f2f2;
   --color-text: #0d0f12;
-  --color-muted: #5c6068;
-  --color-hint: #6b7280;
-  --color-border: rgba(0, 0, 0, 0.08);
+  --color-muted: #334155;
+  --color-hint: #475569;
+  --color-border: rgba(15, 23, 42, 0.16);
   --color-header-bg: rgba(248, 248, 248, 0.56);
   --color-header-border: rgba(0, 0, 0, 0.06);
   --color-primary: #13EC37;
@@ -72,6 +72,22 @@ input[type="number"]::-webkit-inner-spin-button {
 
 input[type="number"] {
   @apply appearance-none;
+}
+
+.superadmin-login-input {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.superadmin-login-input:-webkit-autofill,
+.superadmin-login-input:-webkit-autofill:hover,
+.superadmin-login-input:-webkit-autofill:focus,
+.superadmin-login-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f1f5f9 !important;
+  caret-color: #f1f5f9;
+  background: transparent !important;
+  box-shadow: 0 0 0 1000px #0b1220 inset !important;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 @layer utilities {

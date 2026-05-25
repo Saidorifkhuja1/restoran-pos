@@ -15,13 +15,13 @@ export const createRestaurantSchema = z.object({
 export const createUserSchema = z.object({
   name: z.string().min(2),
   phone: z.string().optional(),
-  pin: z.string().length(4, "PIN 4 raqam bo'lishi kerak"),
+  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak"),
   role: z.enum(["ADMIN", "MANAGER", "WAITER", "KITCHEN", "CASHIER"]),
 });
 
 export const loginSchema = z.object({
   restaurantId: z.string().uuid(),
-  pin: z.string().length(4),
+  pin: z.string().min(4).regex(/^\d+$/),
 });
 
 export const superAdminLoginSchema = z.object({

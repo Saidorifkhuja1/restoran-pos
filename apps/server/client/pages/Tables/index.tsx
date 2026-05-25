@@ -18,13 +18,24 @@ type Table = {
   currentOrderId?: string | null;
   zone: { id: string; name: string; color: string };
 };
+type ActiveOrder = {
+  id: string;
+  orderNumber: number;
+  status: string;
+  createdAt: string;
+  table: { id: string; number: number; status: string; zone: { id: string; name: string } };
+  waiter: { id: string; name: string };
+  items: { id: string; name: string; quantity: number; price: number; status: string }[];
+};
 
 const toneByStatus = {
   FREE: "green",
-  OCCUPIED: "blue",
-  RESERVED: "yellow",
+  OCCUPIED: "red",
+  RESERVED: "red",
   BILL_REQUESTED: "red",
 } as const;
+
+type Translation = (typeof dictionary)[keyof typeof dictionary];
 
 const waiterSections = [
   { id: "cabins", title: "Kabinetlar", aliases: ["kabinet", "vip", "xona"] },
@@ -46,6 +57,68 @@ function tableBelongsToSection(table: Table, sectionId: WaiterSectionId): boolea
   return section.aliases.some((alias) => zoneName.includes(alias));
 }
 
+function orderBelongsToSection(order: ActiveOrder, sectionId: WaiterSectionId): boolean {
+  return tableBelongsToSection({ id: order.table.id, number: order.table.number, capacity: 0, status: order.table.status as Table["status"], zone: { ...order.table.zone, color: "" } }, sectionId);
+}
+
+function tableStatusLabel(status: Table["status"], t: Translation): string {
+  const labels = {
+    FREE: t.statusFree,
+    OCCUPIED: t.statusOccupied,
+    RESERVED: t.statusReserved,
+    BILL_REQUESTED: t.statusBillRequested,
+  };
+  return labels[status];
+}
+
+function orderStatusLabel(status: string, t: Translation): string {
+  const labels: Record<string, string> = {
+    OPEN: t.statusOpen,
+    IN_KITCHEN: t.statusInKitchen,
+    READY: t.statusReady,
+    BILL: t.statusBill,
+    PAID: t.statusPaid,
+    CANCELLED: t.statusCancelled,
+  };
+  return labels[status] || status;
+}
+
+function placeLabel(sectionId?: WaiterSectionId | null): string {
+  if (sectionId === "cabins") return "Kabina";
+  if (sectionId === "street") return "Tapchan";
+  return "Stol";
+}
+
+function sectionTitle(sectionId: WaiterSectionId | null, fallback: string): string {
+  if (sectionId === "cabins") return "Kabinalar";
+  if (sectionId === "street") return "Tapchanlar";
+  return fallback;
+}
+
+function ActiveChecks({ orders, title, t, placeName = "Stol" }: { orders: ActiveOrder[]; title: string; t: Translation; placeName?: string }) {
+  if (orders.length === 0) return null;
+  return (
+    <div className="mt-5">
+      <div className="mb-2 text-sm font-semibold text-[var(--color-muted)]">{title}</div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {orders.map((order) => {
+          const total = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+          return (
+            <Panel key={order.id} className="p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold">#{order.orderNumber} · {placeName} {order.table.number}</div>
+                <Badge tone={order.status === "READY" ? "green" : order.status === "BILL" ? "red" : "yellow"}>{orderStatusLabel(order.status, t)}</Badge>
+              </div>
+              <div className="mt-1 text-sm text-[var(--color-muted)]">{order.table.zone.name} · {order.waiter.name}</div>
+              <div className="mt-2 text-sm font-semibold">{total.toLocaleString("uz-UZ")} UZS</div>
+            </Panel>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TablesPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -61,6 +134,12 @@ export function TablesPage() {
     enabled: Boolean(restaurant?.id),
     queryFn: () => getData<Paginated<Table>>(`/restaurants/${restaurant?.id}/tables?limit=100`),
   });
+  const activeOrders = useQuery({
+    queryKey: ["active-orders", restaurant?.id],
+    enabled: Boolean(restaurant?.id),
+    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&scope=restaurant&limit=100"),
+    refetchInterval: 10_000,
+  });
   const visibleTables = useMemo(() => {
     if (user?.role !== UserRole.WAITER || !selectedWaiterSection) return tables.data?.items ?? [];
     return (tables.data?.items ?? []).filter((table) => tableBelongsToSection(table, selectedWaiterSection));
@@ -74,13 +153,17 @@ export function TablesPage() {
           {waiterSections.map((section) => (
             <button
               key={section.id}
-              className="rounded-md border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:border-teal-300 hover:bg-teal-50"
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-left text-[var(--color-text)] shadow-sm transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
               onClick={() => setSelectedWaiterSection(section.id)}
             >
-              <div className="text-2xl font-semibold text-slate-950">{section.id === "cabins" ? t.cabins : section.id === "hall" ? t.hall : t.street}</div>
+              <div className="text-2xl font-semibold text-[var(--color-text)]">{section.id === "cabins" ? t.cabins : section.id === "hall" ? t.hall : t.street}</div>
+              <div className="mt-2 text-sm text-[var(--color-muted)]">
+                {(activeOrders.data?.items ?? []).filter((order) => orderBelongsToSection(order, section.id)).length} active chek
+              </div>
             </button>
           ))}
         </div>
+        <ActiveChecks orders={activeOrders.data?.items ?? []} title="Active cheklar" t={t} />
       </>
     );
   }
@@ -93,28 +176,37 @@ export function TablesPage() {
             ←
           </button>
         ) : null}
-        <PageTitle title={t.tables} subtitle={user?.role === UserRole.WAITER ? undefined : "Zal xaritasi va stol holatlari"} />
+        <PageTitle title={user?.role === UserRole.WAITER ? sectionTitle(selectedWaiterSection, t.tables) : t.tables} subtitle={user?.role === UserRole.WAITER ? undefined : "Zal xaritasi va stol holatlari"} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {visibleTables.map((table) => (
-          <Panel key={table.id}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="text-xl font-semibold">{t.table} {table.number}</div>
-                <div className="text-sm text-slate-500">{table.zone.name} · {table.capacity} {t.people}</div>
+        {visibleTables.map((table) => {
+          const isBusy = table.status !== "FREE";
+          return (
+            <Panel key={table.id} className={isBusy ? "border-rose-500 bg-rose-950/10 ring-1 ring-rose-500/50" : undefined}>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className={isBusy ? "text-xl font-semibold text-rose-600 dark:text-rose-300" : "text-xl font-semibold"}>{placeLabel(selectedWaiterSection)} {table.number}</div>
+                </div>
+                <Badge tone={toneByStatus[table.status]}>{tableStatusLabel(table.status, t)}</Badge>
               </div>
-              <Badge tone={toneByStatus[table.status]}>{table.status}</Badge>
-            </div>
-            <button
-              className="w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
-              onClick={() => router.push(table.currentOrderId ? `/orders/${table.currentOrderId}` : `/order/${table.id}`)}
-            >
-              {t.open}
-            </button>
-          </Panel>
-        ))}
+              <button
+                className="w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-rose-900/50 disabled:text-rose-100 disabled:opacity-70"
+                disabled={isBusy}
+                onClick={() => router.push(`/order/${table.id}`)}
+              >
+                {isBusy ? t.statusOccupied : t.open}
+              </button>
+            </Panel>
+          );
+        })}
         {visibleTables.length === 0 ? <div className="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">{t.emptySection}</div> : null}
       </div>
+      <ActiveChecks
+        orders={selectedWaiterSection ? (activeOrders.data?.items ?? []).filter((order) => orderBelongsToSection(order, selectedWaiterSection)) : activeOrders.data?.items ?? []}
+        title="Active cheklar"
+        t={t}
+        placeName={placeLabel(selectedWaiterSection)}
+      />
     </>
   );
 }

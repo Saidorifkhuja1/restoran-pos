@@ -15,7 +15,7 @@ type Staff = { id: string; name: string; phone?: string | null; role: StaffRole;
 const staffSchema = z.object({
   name: z.string().min(2, "Ism kerak"),
   phone: z.string().optional(),
-  pin: z.string().regex(/^\d{4}$/, "PIN 4 raqam bo'lishi kerak"),
+  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak"),
   role: z.enum([UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER]),
 });
 const editStaffSchema = staffSchema.extend({ pin: z.string().optional() });
@@ -59,7 +59,7 @@ export function StaffPage() {
           <form className="space-y-3" onSubmit={createForm.handleSubmit((values) => createStaff.mutate(values))}>
             <input className="w-full rounded-md border px-3 py-2" placeholder="Ism" {...createForm.register("name")} />
             <input className="w-full rounded-md border px-3 py-2" placeholder="Telefon" {...createForm.register("phone")} />
-            <input className="w-full rounded-md border px-3 py-2" placeholder="PIN" maxLength={4} {...createForm.register("pin")} />
+            <input className="w-full rounded-md border px-3 py-2" placeholder="PIN" inputMode="numeric" {...createForm.register("pin")} />
             <select className="w-full rounded-md border px-3 py-2" {...createForm.register("role")}>
               <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
             </select>
@@ -85,7 +85,7 @@ export function StaffPage() {
             <select className="w-full rounded-md border px-3 py-2" {...editForm.register("role")}>
               <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
             </select>
-            <input className="w-full rounded-md border px-3 py-2" placeholder="Yangi PIN" maxLength={4} {...editForm.register("pin")} />
+            <input className="w-full rounded-md border px-3 py-2" placeholder="Yangi PIN" inputMode="numeric" {...editForm.register("pin")} />
             <button disabled={updateStaff.isPending} className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Saqlash</button>
           </form>
         </Modal>

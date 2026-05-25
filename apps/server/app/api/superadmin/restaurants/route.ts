@@ -19,7 +19,12 @@ const createRestaurantSchema = z.object({
   // Admin user
   adminName: z.string().min(2, "Admin nomi kamida 2 ta harf bo'lishi kerak"),
   adminPhone: z.string().optional(),
-  adminPin: z.string().length(4, "PIN 4 raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak"),
+  adminPin: z.string()
+    .min(8, "Parol kamida 8 ta belgi bo'lishi kerak")
+    .regex(/[A-Z]/, "Parolda katta harf bo'lishi kerak")
+    .regex(/[a-z]/, "Parolda kichik harf bo'lishi kerak")
+    .regex(/\d/, "Parolda raqam bo'lishi kerak")
+    .regex(/[^A-Za-z0-9]/, "Parolda maxsus belgi bo'lishi kerak"),
 });
 
 type CreateRestaurantRequest = z.infer<typeof createRestaurantSchema>;
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
     const data = parseResult.data as CreateRestaurantRequest;
     const superAdminId = (auth.token as SuperAdminToken).superAdminId;
 
-    // Hash admin PIN
+    // Hash admin password
     const hashedPin = await bcrypt.hash(data.adminPin, 10);
 
     // Create restaurant and admin user in transaction

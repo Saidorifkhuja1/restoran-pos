@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
 
     const order = await prisma.order.findFirst({
-      where: { id: params.id, restaurantId: token.restaurantId },
+      where: { id: params.id, restaurantId: token.restaurantId, ...(token.role === UserRole.WAITER ? { waiterId: token.userId } : {}) },
       select: { id: true, status: true },
     });
     if (!order) return notFound("Buyurtma topilmadi");

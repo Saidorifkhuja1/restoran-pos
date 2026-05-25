@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 import { notFound, serverError, success, unauthorized } from "@/lib/responses";
 import { getRestaurantToken } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
@@ -22,6 +23,12 @@ export async function POST(request: NextRequest) {
       where: { id: active.id },
       data: { isActive: false, endedAt: new Date() },
       select: { id: true, startedAt: true, endedAt: true, totalSales: true, totalOrders: true, isActive: true },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "shift:updated", {
+      action: "ended",
+      shift,
+      userId: token.userId,
     });
 
     return success(shift);

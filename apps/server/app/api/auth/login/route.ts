@@ -9,9 +9,9 @@ import { zodMessage } from "@/lib/route-helpers";
 
 const loginSchema = z.object({
   login: z.string().min(2, "Login majburiy").optional(),
-  password: z.string().length(4, "Parol 4 raqam bo'lishi kerak").regex(/^\d+$/, "Parol faqat raqamlardan iborat bo'lishi kerak").optional(),
+  password: z.string().min(4, "Parol kamida 4 ta belgi bo'lishi kerak").optional(),
   restaurantId: z.string().min(1, "Restoran ID majburiy").optional(),
-  pin: z.string().length(4, "PIN 4 raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak").optional(),
+  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak").optional(),
 }).refine((data) => Boolean((data.login && data.password) || (data.restaurantId && data.pin)), {
   message: "Login/parol majburiy",
 });
@@ -121,13 +121,15 @@ export async function POST(request: NextRequest) {
 
     // Generate JWT token
     const token = await signUserToken(user.id, authRestaurantId, user.role);
-    await createNextAuthSession({
+
+    // NextAuth session is best-effort; the cookie-based JWT is the primary auth
+    createNextAuthSession({
       flow: "STAFF",
       restaurantId: authRestaurantId,
       pin,
     }).catch(() => undefined);
 
-    return setAuthCookie(success({
+    const response = success({
       user: {
         id: user.id,
         name: user.name,
@@ -140,7 +142,9 @@ export async function POST(request: NextRequest) {
         currency: user.restaurant.currency,
         taxPercent: user.restaurant.taxPercent,
       },
-    }), token);
+    });
+
+    return setAuthCookie(response, token);
   } catch (error) {
     console.error("[Staff Login Error]", error);
     return serverError("Login xatosi yuz berdi");

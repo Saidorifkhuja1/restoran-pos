@@ -5,29 +5,29 @@ import { NextResponse } from "next/server";
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.NEXT_PHASE !== "phase-production-build"
+    ) {
       throw new Error("JWT_SECRET environment variable is required in production");
     }
-    console.warn("[AUTH] JWT_SECRET not set — using insecure default. Set JWT_SECRET in .env");
+    console.warn("[AUTH] JWT_SECRET not set — using insecure default");
     return new TextEncoder().encode("dev-only-insecure-jwt-secret-do-not-use-in-prod");
   }
   return new TextEncoder().encode(secret);
 }
 
 const JWT_SECRET = getJwtSecret();
-const JWT_EXPIRATION = process.env.JWT_EXPIRATION || "24h";
+const JWT_EXPIRATION = process.env.JWT_EXPIRATION ?? "24h";
+
+const COOKIE_NAME = "restopos-token" as const;
 
 export async function signSuperAdminToken(superAdminId: string): Promise<string> {
-  const token = await new SignJWT({
-    role: "SUPERADMIN",
-    superAdminId,
-  })
+  return new SignJWT({ role: "SUPERADMIN", superAdminId })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(JWT_EXPIRATION)
     .setIssuedAt()
     .sign(JWT_SECRET);
-
-  return token;
 }
 
 export async function signUserToken(
@@ -35,40 +35,37 @@ export async function signUserToken(
   restaurantId: string,
   role: string
 ): Promise<string> {
-  const token = await new SignJWT({
-    role,
-    userId,
-    restaurantId,
-  })
+  return new SignJWT({ role, userId, restaurantId })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(JWT_EXPIRATION)
     .setIssuedAt()
     .sign(JWT_SECRET);
-
-  return token;
 }
 
 export async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
-    return verified.payload as JWTPayload;
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return payload as JWTPayload;
   } catch {
     return null;
   }
 }
 
-export function extractToken(authHeader?: string, cookieToken?: string): string | null {
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    return authHeader.substring(7);
+export function extractToken(
+  authHeader?: string | null,
+  cookieToken?: string
+): string | null {
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.slice(7);
   }
-  return cookieToken || null;
+  return cookieToken ?? null;
 }
 
 export function setAuthCookie<T>(
   response: NextResponse<T>,
   token: string
 ): NextResponse<T> {
-  response.cookies.set("restopos-token", token, {
+  response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -79,7 +76,7 @@ export function setAuthCookie<T>(
 }
 
 export function clearAuthCookie<T>(response: NextResponse<T>): NextResponse<T> {
-  response.cookies.set("restopos-token", "", {
+  response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

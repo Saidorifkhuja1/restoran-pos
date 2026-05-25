@@ -3,15 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success } from "@/lib/responses";
 import { UserToken } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const updateRestaurantSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   logo: z.string().url().nullable().optional(),
-  type: z.string().optional(),
-  address: z.string().optional(),
-  phone: z.string().optional(),
-  taxPercent: z.number().min(0).max(100).optional(),
-  receiptFooter: z.string().optional(),
+  type: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  taxId: z.string().nullable().optional(),
+  taxPercent: z.number().min(0, "QQS 0 dan kichik bo'lmasin").max(100, "QQS 100 dan oshmasin").optional(),
+  receiptFooter: z.string().nullable().optional(),
   currency: z.string().length(3).optional(),
 });
 
@@ -96,6 +98,8 @@ export async function PUT(request: NextRequest) {
         settings: true,
       },
     });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "restaurant:updated", updated);
 
     return success(updated);
   } catch (error) {

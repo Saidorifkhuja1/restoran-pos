@@ -15,7 +15,8 @@ export async function getPageSession(): Promise<JWTPayload | null> {
 export async function requirePageRole(roles: PageRole[]): Promise<JWTPayload> {
   const session = await getPageSession();
   if (!session) {
-    redirect(roles.includes("SUPERADMIN") ? "/superadmin/login" : "/login");
+    const loginPath = roles.includes("SUPERADMIN") ? "/superadmin/login" : "/login";
+    redirect(loginPath);
   }
 
   if (!roles.includes(session.role as PageRole)) {

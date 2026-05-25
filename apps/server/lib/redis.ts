@@ -1,26 +1,22 @@
-import { createClient, RedisClientType } from "redis";
+import Redis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL;
-const globalForRedis = global as unknown as { redis?: RedisClientType };
+const globalForRedis = globalThis as unknown as { redis?: Redis };
 
-export const redis =
-  globalForRedis.redis ||
-  (redisUrl
-    ? createClient({
-        url: redisUrl,
-      })
-    : null);
+export const redis: Redis | null =
+  globalForRedis.redis ??
+  (redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 3, lazyConnect: true }) : null);
 
 if (redis && !globalForRedis.redis) {
   redis.on("error", (error) => {
-    console.error("[Redis Error]", error);
+    console.error("[Redis Error]", error.message);
   });
   globalForRedis.redis = redis;
 }
 
-export async function getRedis(): Promise<RedisClientType | null> {
+export async function getRedis(): Promise<Redis | null> {
   if (!redis) return null;
-  if (!redis.isOpen) {
+  if (redis.status === "wait") {
     await redis.connect();
   }
   return redis;
@@ -40,16 +36,19 @@ export async function setCachedJson<T>(
 ): Promise<void> {
   const client = await getRedis();
   if (!client) return;
-  await client.set(key, JSON.stringify(value), { EX: ttlSeconds });
+  await client.set(key, JSON.stringify(value), "EX", ttlSeconds);
 }
 
 export async function deleteCacheByPattern(pattern: string): Promise<void> {
   const client = await getRedis();
   if (!client) return;
 
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
-    if (typeof key === "string") {
-      await client.del(key);
+  let cursor = "0";
+  do {
+    const [nextCursor, keys] = await client.scan(cursor, "MATCH", pattern, "COUNT", 100);
+    cursor = nextCursor;
+    if (keys.length > 0) {
+      await client.del(...keys);
     }
-  }
+  } while (cursor !== "0");
 }

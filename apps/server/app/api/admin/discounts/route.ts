@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success } from "@/lib/responses";
 import { UserToken, DiscountType } from "@restopos/types";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createDiscountSchema = z.object({
   name: z.string().min(2, "Chegirma nomi kamida 2 ta harf bo'lishi kerak"),
@@ -124,6 +125,11 @@ export async function POST(request: NextRequest) {
           select: { payments: true },
         },
       },
+    });
+
+    await publishEvent(restaurantChannel(token.restaurantId), "discount:updated", {
+      action: "created",
+      discount,
     });
 
     return success(discount, 201);
