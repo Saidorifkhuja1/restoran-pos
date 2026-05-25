@@ -84,6 +84,36 @@ function ActiveChecks({ orders, title, onOpen }: { orders: ActiveOrder[]; title:
   );
 }
 
+function WaiterPicker({ waiters, selectedWaiterId, onSelect }: { waiters: Staff[]; selectedWaiterId: string; onSelect: (id: string) => void }) {
+  return (
+    <div className="mt-4">
+      <div className="mb-2 text-sm font-semibold text-[var(--color-muted)]">Mas'ul ofitsiant</div>
+      {waiters.length === 0 ? (
+        <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">Faol ofitsiant topilmadi.</div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {waiters.map((waiter) => {
+            const selected = waiter.id === selectedWaiterId;
+            return (
+              <button
+                key={waiter.id}
+                className={`rounded-md border p-3 text-left text-sm font-semibold shadow-sm transition active:scale-[0.99] ${
+                  selected
+                    ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-contrast)]"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)]"
+                }`}
+                onClick={() => onSelect(waiter.id)}
+              >
+                {waiter.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CashierDashboard() {
   const queryClient = useQueryClient();
   const restaurant = useAuthStore((s) => s.restaurant);
@@ -168,12 +198,17 @@ export function CashierDashboard() {
   const createOrder = useMutation({
     mutationFn: async () => {
       const items = cart.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity }));
-      await apiClient.post("/orders", {
-        tableId: selectedTableId,
-        guestCount: 1,
-        waiterId: selectedWaiterId,
-        items,
-      });
+      try {
+        await apiClient.post("/orders", {
+          tableId: selectedTableId,
+          guestCount: 1,
+          waiterId: selectedWaiterId,
+          items,
+        });
+      } catch (error) {
+        const message = (error as { response?: { data?: { error?: string } } }).response?.data?.error;
+        throw new Error(message || "Chek yaratishda xato");
+      }
     },
     onSuccess: async () => {
       setCart([]);
@@ -233,19 +268,22 @@ export function CashierDashboard() {
         <div className="grid items-start gap-3 md:grid-cols-[1fr_320px]">
           <div>
             {!categoryId ? (
-              <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    className="min-h-[150px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:shadow-md active:scale-[0.99]"
-                    onClick={() => setCategoryId(category.id)}
-                  >
-                    <div className="mb-4 text-4xl">🍽</div>
-                    <div className="text-lg font-bold text-[var(--color-text)]">{category.name}</div>
-                    <div className="mt-1 text-sm text-[var(--color-muted)]">{category.count} ta taom</div>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      className="min-h-[150px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:shadow-md active:scale-[0.99]"
+                      onClick={() => setCategoryId(category.id)}
+                    >
+                      <div className="mb-4 text-4xl">🍽</div>
+                      <div className="text-lg font-bold text-[var(--color-text)]">{category.name}</div>
+                      <div className="mt-1 text-sm text-[var(--color-muted)]">{category.count} ta taom</div>
+                    </button>
+                  ))}
+                </div>
+                <WaiterPicker waiters={waiters} selectedWaiterId={selectedWaiterId} onSelect={setSelectedWaiterId} />
+              </>
             ) : (
               <>
                 <div className="mb-3 flex items-center gap-3">
@@ -271,6 +309,7 @@ export function CashierDashboard() {
                     </Panel>
                   ))}
                 </div>
+                <WaiterPicker waiters={waiters} selectedWaiterId={selectedWaiterId} onSelect={setSelectedWaiterId} />
               </>
             )}
           </div>
@@ -278,11 +317,9 @@ export function CashierDashboard() {
             <div className="mb-3 text-sm font-semibold">Savatcha</div>
             <div className="mb-3 grid gap-2">
               <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm">Stol {selectedTable.number} · {selectedTable.zone.name}</div>
-              <select className="rounded-md border px-3 py-2 text-sm" value={selectedWaiterId} onChange={(e) => setSelectedWaiterId(e.target.value)}>
-                <option value="">Ofitsiant tanlang</option>
-                {waiters.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-              {waiters.length === 0 ? <div className="text-sm text-rose-600">Faol ofitsiant topilmadi.</div> : null}
+              <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm">
+                Ofitsiant: {waiters.find((waiter) => waiter.id === selectedWaiterId)?.name || "tanlanmagan"}
+              </div>
             </div>
             <div className="space-y-2">
               {cart.map((item) => (
@@ -306,8 +343,9 @@ export function CashierDashboard() {
               className="w-full rounded-md bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-primary-contrast)] disabled:opacity-50"
               onClick={() => createOrder.mutate()}
             >
-              {createOrder.isPending ? "Yuborilmoqda..." : "Oshxonaga yuborish"}
+              {createOrder.isPending ? "Yuborilmoqda..." : !selectedWaiterId ? "Ofitsiant tanlang" : "Oshxonaga yuborish"}
             </button>
+            {!selectedWaiterId ? <div className="mt-2 text-sm text-amber-600">Chek waiter profilida ko'rinishi uchun ofitsiant tanlang.</div> : null}
             {createOrder.error ? <div className="mt-2 text-sm text-rose-600">Xato: {createOrder.error.message}</div> : null}
           </Panel>
         </div>
