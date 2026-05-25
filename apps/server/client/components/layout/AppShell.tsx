@@ -1,34 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Globe, Moon, Sun } from "lucide-react";
 import { apiClient } from "@/client/api/client";
-import { ShiftControls } from "@/client/components/layout/ShiftControls";
 import { useRealtimeInvalidation } from "@/client/hooks/useRealtimeInvalidation";
-import { useAuthStore, AuthRole } from "@/client/store/authStore";
+import { useAuthStore } from "@/client/store/authStore";
 import { dictionary, Language, usePreferencesStore } from "@/client/store/preferencesStore";
-import { UserRole } from "@restopos/types";
 
-type NavLink = { to: string; label: string; roles: AuthRole[] };
 type ProfilePanel = "profile" | null;
-
-const links: NavLink[] = [
-  { to: "/tables", label: "Stollar", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] },
-  { to: "/kitchen", label: "KDS", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.KITCHEN] },
-  { to: "/cashier", label: "Kassa", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER] },
-  { to: "/reservations", label: "Bron", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] },
-  { to: "/admin/dashboard", label: "Admin", roles: [UserRole.ADMIN, UserRole.MANAGER] },
-  { to: "/admin/staff", label: "Xodimlar", roles: [UserRole.ADMIN] },
-  { to: "/admin/zones", label: "Zonalar", roles: [UserRole.ADMIN, UserRole.MANAGER] },
-  { to: "/admin/menu", label: "Menyu", roles: [UserRole.ADMIN, UserRole.MANAGER] },
-  { to: "/admin/discounts", label: "Chegirma", roles: [UserRole.ADMIN] },
-  { to: "/admin/expenses", label: "Xarajat", roles: [UserRole.ADMIN, UserRole.MANAGER] },
-  { to: "/admin/reports", label: "Hisobot", roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER] },
-  { to: "/admin/audit", label: "Audit", roles: [UserRole.ADMIN, UserRole.MANAGER] },
-  { to: "/admin/settings", label: "Sozlama", roles: [UserRole.ADMIN] },
-];
 
 const iconButtonClass = "flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-primary-contrast)] shadow-sm transition-all active:scale-95";
 const languageOptions: { value: Language; label: string }[] = [
@@ -48,8 +28,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   const t = dictionary[language];
   const [resolvedDark, setResolvedDark] = useState(false);
   useRealtimeInvalidation();
-  const visibleLinks = user?.role === UserRole.WAITER ? [] : links.filter((link) => user && link.roles.includes(user.role));
-  const hideSidebar = user?.role === UserRole.WAITER;
   useEffect(() => {
     if (user?.role === "SUPERADMIN") {
       router.replace("/superadmin/dashboard");
@@ -96,27 +74,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
-      {!hideSidebar ? (
-        <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-300 bg-white md:block">
-          <nav className="space-y-1 p-3">
-            {visibleLinks.map((link) => {
-              const isActive = pathname === link.to || pathname.startsWith(`${link.to}/`);
-              return (
-              <Link
-                key={link.to}
-                href={link.to}
-                className={`block rounded-md px-3 py-2 text-sm font-medium ${
-                  isActive ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {link.label}
-              </Link>
-              );
-            })}
-          </nav>
-        </aside>
-      ) : null}
-      <div className={hideSidebar ? "" : "md:pl-64"}>
+      <div>
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-slate-300 bg-white/95 px-5 shadow-sm backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             {showBackButton ? (
@@ -134,7 +92,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
             </div>
           </div>
           <div className="relative flex items-center gap-2">
-            <ShiftControls />
             <button
               className={iconButtonClass}
               aria-label="Theme"
@@ -174,12 +131,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
               <div className="absolute right-0 top-11 z-20 w-44 rounded-md border border-slate-300 bg-white py-1 shadow-lg">
                 <button className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => openPanel("profile")}>
                   {t.profile}
-                </button>
-                <button className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => {
-                  setProfileOpen(false);
-                  router.push("/shifts");
-                }}>
-                  {t.shifts}
                 </button>
                 <button className="block w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50" onClick={handleLogout}>
                   {t.logout}
