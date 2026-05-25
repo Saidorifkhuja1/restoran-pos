@@ -852,7 +852,7 @@ export function AdminDashboard() {
               {modal === "zone" ? (
                 <>
                   <Input placeholder="Zona nomi (masalan: Zal, Kabinalar, Ko'cha)" value={zoneName} onChange={setZoneName} />
-                  <Input placeholder="Rang (#3B82F6)" value={zoneColor} onChange={setZoneColor} />
+                  {!editingZone ? <Input placeholder="Rang (#3B82F6)" value={zoneColor} onChange={setZoneColor} /> : null}
                 </>
               ) : null}
             </div>
