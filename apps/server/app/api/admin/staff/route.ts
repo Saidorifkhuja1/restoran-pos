@@ -11,10 +11,37 @@ import { publishEvent, restaurantChannel } from "@/lib/pusher";
 const createStaffSchema = z.object({
   name: z.string().min(2, "Nom kamida 2 ta harf bo'lishi kerak"),
   phone: z.string().optional(),
-  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat"),
-  role: z.enum(["MANAGER", "WAITER", "KITCHEN", "CASHIER"], {
+  pin: z.string().optional(),
+  password: z.string()
+    .min(8, "Parol kamida 8 ta belgi bo'lishi kerak")
+    .regex(/[A-Z]/, "Parolda katta harf bo'lishi kerak")
+    .regex(/[a-z]/, "Parolda kichik harf bo'lishi kerak")
+    .regex(/\d/, "Parolda raqam bo'lishi kerak")
+    .regex(/[^A-Za-z0-9]/, "Parolda maxsus belgi bo'lishi kerak")
+    .optional(),
+  role: z.enum(["ADMIN", "MANAGER", "WAITER", "KITCHEN", "CASHIER"], {
     errorMap: () => ({ message: "Noto'g'ri rol" }),
   }),
+}).superRefine((data, ctx) => {
+  if (data.role === "ADMIN") {
+    if (!data.password) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "Admin uchun kuchli parol majburiy" });
+    }
+    return;
+  }
+
+  if (!data.pin) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pin"], message: "PIN majburiy" });
+    return;
+  }
+
+  if (data.pin.length < 4) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pin"], message: "PIN kamida 4 ta raqam bo'lishi kerak" });
+  }
+
+  if (!/^\d+$/.test(data.pin)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pin"], message: "PIN faqat raqamlardan iborat" });
+  }
 });
 
 type CreateStaffRequest = z.infer<typeof createStaffSchema>;
@@ -114,21 +141,25 @@ export async function POST(request: NextRequest) {
       select: { id: true, pin: true },
     });
 
+    const credential = data.role === "ADMIN" ? data.password : data.pin;
+    if (!credential) {
+      return badRequest(data.role === "ADMIN" ? "Admin uchun kuchli parol majburiy" : "PIN majburiy");
+    }
+
     const existingUser = (
       await Promise.all(
         sameRestaurantUsers.map(async (candidate) => ({
           candidate,
-          matches: await bcrypt.compare(data.pin, candidate.pin),
+          matches: await bcrypt.compare(credential, candidate.pin),
         }))
       )
     ).find(({ matches }) => matches)?.candidate;
 
     if (existingUser) {
-      return badRequest("Bu PIN allaqachon ishlatilgan");
+      return badRequest(data.role === "ADMIN" ? "Bu parol allaqachon ishlatilgan" : "Bu PIN allaqachon ishlatilgan");
     }
 
-    // Hash PIN
-    const hashedPin = await bcrypt.hash(data.pin, 10);
+    const hashedPin = await bcrypt.hash(credential, 10);
 
     const user = await prisma.user.create({
       data: {

@@ -283,6 +283,10 @@ function isUnauthorized(error: unknown) {
   return error instanceof AxiosError && error.response?.status === 401;
 }
 
+function isStrongPassword(value: string) {
+  return value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
+}
+
 export function AdminDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -637,7 +641,7 @@ export function AdminDashboard() {
                         <button className="block w-full rounded-[10px] bg-[#13EC37]/15 px-3 py-2 text-left text-xs font-black text-[#13EC37]" type="button" onClick={() => setModal("place")}>+ Yangi joy</button>
                         {(data?.tables ?? []).map((table) => (
                           <div key={table.id} className="flex items-center justify-between rounded-[10px] bg-[var(--color-surface2)] px-3 py-2">
-                            <span className="text-xs font-bold text-[var(--color-text)]">{table.zone.name} · #{table.number}</span>
+                            <span className="text-xs font-bold text-[var(--color-text)]">{table.zone.name} · #{table.number} · {table.capacity} kishi</span>
                             <button className="text-rose-400 hover:text-rose-300" type="button" onClick={() => setConfirmAction(() => () => deletePlaceMut.mutate(table.id))}><Trash2 size={13} /></button>
                           </div>
                         ))}
@@ -748,7 +752,10 @@ export function AdminDashboard() {
                                 return (
                                   <div className={busy ? "rounded-[12px] border border-rose-400/45 bg-rose-500/10 p-3" : "rounded-[12px] border border-[var(--color-border)] bg-[var(--color-bg)] p-3"} key={table.id}>
                                     <div className="flex items-center justify-between">
-                                      <div className="font-black">{placeLabel(zone.name, table.number, t)}</div>
+                                      <div className="flex min-w-0 items-baseline gap-2">
+                                        <span className="font-black">{placeLabel(zone.name, table.number, t)}</span>
+                                        <span className="text-xs font-bold text-[var(--color-muted)]">· {table.capacity} kishi</span>
+                                      </div>
                                       <div className="flex items-center gap-1">
                                         <Badge tone={busy ? "red" : "green"}>{busy ? t.busy : t.free}</Badge>
                                         <button className="flex h-6 w-6 items-center justify-center rounded-md border border-rose-400/30 text-rose-300" type="button" onClick={() => setConfirmAction(() => () => deletePlaceMut.mutate(table.id))}><Trash2 size={12} /></button>
@@ -1239,6 +1246,11 @@ function SettingsSection({ restaurant, currentUserId, t, queryClient }: { restau
   const [profilePhone, setProfilePhone] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showAdminForm, setShowAdminForm] = useState(false);
+  const [adminName, setAdminName] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminError, setAdminError] = useState("");
   const [error, setError] = useState("");
   const [profileError, setProfileError] = useState("");
 
@@ -1304,6 +1316,26 @@ function SettingsSection({ restaurant, currentUserId, t, queryClient }: { restau
     onError: (err) => { setProfileError(err instanceof AxiosError ? err.response?.data?.error || "Profil yangilashda xato" : "Profil yangilashda xato"); },
   });
 
+  const createAdmin = useMutation({
+    mutationFn: () => apiClient.post("/admin/staff", {
+      name: adminName,
+      phone: adminPhone || undefined,
+      password: adminPassword,
+      role: "ADMIN",
+    }),
+    onSuccess: async () => {
+      setAdminName("");
+      setAdminPhone("");
+      setAdminPassword("");
+      setAdminError("");
+      setShowAdminForm(false);
+      await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+    },
+    onError: (err) => {
+      setAdminError(err instanceof AxiosError ? err.response?.data?.error || "Admin yaratishda xato" : "Admin yaratishda xato");
+    },
+  });
+
   function submitRestaurantUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -1348,6 +1380,42 @@ function SettingsSection({ restaurant, currentUserId, t, queryClient }: { restau
             <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] p-4"><div className="text-sm font-semibold text-[var(--color-muted)]">{t.role}</div><div className="mt-1 text-lg font-black">{profile.data?.role || "ADMIN"}</div></div>
           </div>
         )}
+      </section>
+
+      <section className="rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">Adminlar</h2>
+            <p className="mt-1 text-sm font-semibold text-[var(--color-muted)]">Restoran sozlamalarini boshqaradigan yangi admin qo'shing</p>
+          </div>
+          <button className="rounded-[10px] border border-[var(--color-border)] px-4 py-2 text-xs font-bold text-[var(--color-text)] hover:bg-[var(--color-surface2)]" type="button" onClick={() => { setShowAdminForm((open) => !open); setAdminError(""); }}>
+            {showAdminForm ? "Bekor" : "+ Yangi admin"}
+          </button>
+        </div>
+        {showAdminForm ? (
+          <form className="grid gap-3" onSubmit={(e) => {
+            e.preventDefault();
+            setAdminError("");
+            if (!adminName.trim()) {
+              setAdminError("Admin ismi majburiy");
+              return;
+            }
+            if (!isStrongPassword(adminPassword)) {
+              setAdminError("Parol kamida 8 belgi, katta/kichik harf, raqam va maxsus belgidan iborat bo'lishi kerak");
+              return;
+            }
+            createAdmin.mutate();
+          }}>
+            {adminError ? <div className="rounded-[12px] bg-rose-400/10 px-3 py-2 text-sm font-semibold text-rose-300">{adminError}</div> : null}
+            <div className="grid gap-3 md:grid-cols-3">
+              <Input placeholder={t.name} value={adminName} onChange={setAdminName} />
+              <Input placeholder={t.phone} value={adminPhone} onChange={setAdminPhone} />
+              <Input placeholder="Kuchli parol" type="password" value={adminPassword} onChange={setAdminPassword} />
+            </div>
+            <div className="rounded-[12px] bg-[var(--color-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-muted)]">Parol kamida 8 belgi, katta/kichik harf, raqam va maxsus belgidan iborat bo'lishi kerak.</div>
+            <button className="h-11 rounded-[14px] bg-[#13EC37] text-sm font-black text-[#121417] disabled:opacity-60" type="submit" disabled={createAdmin.isPending}>{createAdmin.isPending ? "Yaratilmoqda..." : "Admin qo'shish"}</button>
+          </form>
+        ) : null}
       </section>
 
       <section className="rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
