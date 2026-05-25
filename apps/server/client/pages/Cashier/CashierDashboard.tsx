@@ -15,7 +15,7 @@ type Table = {
   number: number;
   capacity: number;
   status: "FREE" | "OCCUPIED" | "RESERVED" | "BILL_REQUESTED";
-  zone: { id: string; name: string };
+  zone: { id: string; name: string; color?: string | null };
 };
 type Staff = { id: string; name: string; role: string };
 type MenuItem = {
@@ -31,7 +31,7 @@ type ActiveOrder = {
   status: string;
   guestCount: number;
   createdAt: string;
-  table: { id: string; number: number; status: string; zone: { name: string } };
+  table: { id: string; number: number; status: string; zone: { id?: string; name: string } };
   waiter: { id: string; name: string };
   items: { id: string; name: string; price: number; quantity: number; status: string; note?: string | null }[];
 };
@@ -49,22 +49,14 @@ const paymentSchema = z.object({
 });
 type PaymentForm = z.infer<typeof paymentSchema>;
 
-const statusTone: Record<string, "green" | "yellow" | "red"> = {
-  OPEN: "yellow",
-  IN_KITCHEN: "yellow",
-  READY: "green",
-  BILL: "red",
-  PAID: "green",
-  CANCELLED: "red",
-};
-
 export function CashierDashboard() {
   const queryClient = useQueryClient();
   const restaurant = useAuthStore((s) => s.restaurant);
-  const [activeTab, setActiveTab] = useState<"tables" | "orders">("orders");
-  const [createOrderModal, setCreateOrderModal] = useState(false);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [selectedTableId, setSelectedTableId] = useState("");
   const [selectedWaiterId, setSelectedWaiterId] = useState("");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [editingOrder, setEditingOrder] = useState<ActiveOrder | null>(null);
 
@@ -100,7 +92,38 @@ export function CashierDashboard() {
   });
 
   const waiters = useMemo(() => (staff.data?.items ?? []).filter((s) => s.role === "WAITER"), [staff.data]);
-  const freeTables = useMemo(() => (tables.data?.items ?? []).filter((t) => t.status === "FREE"), [tables.data]);
+  const zones = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color?: string | null; total: number; busy: number }>();
+    (tables.data?.items ?? []).forEach((table) => {
+      const current = seen.get(table.zone.id) ?? { id: table.zone.id, name: table.zone.name, color: table.zone.color, total: 0, busy: 0 };
+      seen.set(table.zone.id, {
+        ...current,
+        total: current.total + 1,
+        busy: current.busy + (table.status === "FREE" ? 0 : 1),
+      });
+    });
+    return Array.from(seen.values());
+  }, [tables.data?.items]);
+  const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
+  const visibleTables = useMemo(() => {
+    if (!selectedZoneId) return [];
+    return (tables.data?.items ?? []).filter((table) => table.zone.id === selectedZoneId);
+  }, [selectedZoneId, tables.data?.items]);
+  const orderByTableId = useMemo(() => {
+    const map = new Map<string, ActiveOrder>();
+    (orders.data?.items ?? []).forEach((order) => map.set(order.table.id, order));
+    return map;
+  }, [orders.data?.items]);
+  const categories = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; count: number }>();
+    (menu.data?.items ?? []).forEach((item) => {
+      const existing = seen.get(item.category.id);
+      seen.set(item.category.id, { id: item.category.id, name: item.category.name, count: (existing?.count ?? 0) + 1 });
+    });
+    return Array.from(seen.values());
+  }, [menu.data?.items]);
+  const selectedCategory = categories.find((category) => category.id === categoryId);
+  const categoryItems = categoryId ? (menu.data?.items ?? []).filter((item) => item.category.id === categoryId) : [];
 
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -116,7 +139,8 @@ export function CashierDashboard() {
       setCart([]);
       setSelectedTableId("");
       setSelectedWaiterId("");
-      setCreateOrderModal(false);
+      setCategoryId(null);
+      setSelectedTable(null);
       await queryClient.invalidateQueries({ queryKey: ["cashier-all-orders"] });
       await queryClient.invalidateQueries({ queryKey: ["cashier-tables"] });
     },
@@ -135,88 +159,114 @@ export function CashierDashboard() {
 
   const cartTotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+  function openTable(table: Table) {
+    const activeOrder = orderByTableId.get(table.id);
+    if (activeOrder) {
+      setEditingOrder(activeOrder);
+      return;
+    }
+    if (table.status !== "FREE") return;
+    setSelectedTable(table);
+    setSelectedTableId(table.id);
+    setSelectedWaiterId("");
+    setCategoryId(null);
+    setCart([]);
+  }
+
+  function closeCreateOrder() {
+    setSelectedTable(null);
+    setSelectedTableId("");
+    setSelectedWaiterId("");
+    setCategoryId(null);
+    setCart([]);
+  }
+
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
-        <PageTitle title="Kassa" subtitle="Cheklar va stollar boshqaruvi" />
-        <button className="rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white" onClick={() => setCreateOrderModal(true)}>+ Yangi chek</button>
+      <div className="mb-4">
+        {selectedZoneId ? (
+          <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700" aria-label="Orqaga" onClick={() => setSelectedZoneId(null)}>
+            ←
+          </button>
+        ) : null}
+        <PageTitle title={selectedZone?.name || "Kassa"} subtitle={selectedZone ? "Stol holatini tanlang" : "Zonalar va aktiv stollar"} />
       </div>
 
-      <div className="mb-4 flex gap-2">
-        <button className={activeTab === "orders" ? "rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white" : "rounded-md border px-4 py-2 text-sm font-semibold"} onClick={() => setActiveTab("orders")}>Cheklar ({orders.data?.items.length ?? 0})</button>
-        <button className={activeTab === "tables" ? "rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white" : "rounded-md border px-4 py-2 text-sm font-semibold"} onClick={() => setActiveTab("tables")}>Stollar</button>
-      </div>
-
-      {activeTab === "orders" ? (
-        <div className="space-y-2">
-          {(orders.data?.items ?? []).length === 0 ? <Panel><div className="text-sm text-slate-500">Hozircha aktiv chek yo'q</div></Panel> : null}
-          {(orders.data?.items ?? []).map((order) => (
-            <Panel key={order.id}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-semibold">#{order.orderNumber}</span>
-                  <span className="ml-2 text-sm text-slate-500">Stol {order.table.number} · {order.table.zone.name}</span>
-                  <span className="ml-2 text-sm text-slate-500">· {order.waiter.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone={statusTone[order.status] ?? "yellow"}>{order.status}</Badge>
-                  <button className="rounded-md border px-2 py-1 text-xs" onClick={() => setEditingOrder(order)}>Tahrirlash</button>
-                </div>
-              </div>
-              <div className="mt-2 grid gap-1">
-                {order.items.map((item) => (
-                  <div className="flex justify-between text-sm" key={item.id}>
-                    <span>{item.name} x{item.quantity}</span>
-                    <span className={item.status === "CANCELLED" ? "font-semibold text-slate-400 line-through" : "font-semibold"}>{(item.price * item.quantity).toLocaleString("uz-UZ")}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 flex justify-between border-t pt-2 font-semibold">
-                <span>Jami</span>
-                <span>{order.items.filter((item) => item.status !== "CANCELLED").reduce((s, i) => s + i.price * i.quantity, 0).toLocaleString("uz-UZ")} UZS</span>
-              </div>
-            </Panel>
+      {!selectedZoneId ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {zones.map((zone) => (
+            <button
+              key={zone.id}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
+              onClick={() => setSelectedZoneId(zone.id)}
+            >
+              <div className="mb-3 h-3 w-12 rounded-full" style={{ backgroundColor: zone.color || "#0f766e" }} />
+              <div className="text-xl font-bold text-[var(--color-text)]">{zone.name}</div>
+              <div className="mt-2 text-sm text-[var(--color-muted)]">{zone.total} stol · {zone.busy} band</div>
+            </button>
           ))}
+          {zones.length === 0 ? <Panel><div className="text-sm text-slate-500">Zona topilmadi</div></Panel> : null}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {(tables.data?.items ?? []).map((table) => {
-            const isBusy = table.status !== "FREE";
+          {visibleTables.map((table) => {
+            const activeOrder = orderByTableId.get(table.id);
+            const isBusy = Boolean(activeOrder) || table.status !== "FREE";
             return (
-              <Panel key={table.id} className={isBusy ? "border-rose-500 ring-1 ring-rose-500/50" : undefined}>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="font-semibold">Stol {table.number}</div>
-                  <Badge tone={isBusy ? "red" : "green"}>{isBusy ? table.status : "Bo'sh"}</Badge>
+              <button
+                key={table.id}
+                className={`rounded-md border bg-[var(--color-surface)] p-4 text-left shadow-sm transition active:scale-[0.99] ${isBusy ? "border-rose-400 ring-1 ring-rose-400/50" : "border-[var(--color-border)] hover:border-[var(--color-primary)]"}`}
+                onClick={() => openTable(table)}
+              >
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="text-xl font-bold text-[var(--color-text)]">Stol {table.number}</div>
+                  <Badge tone={isBusy ? "red" : "green"}>{isBusy ? "Band" : "Bo'sh"}</Badge>
                 </div>
-                <div className="text-sm text-slate-500">{table.zone.name}</div>
-              </Panel>
+                <div className="text-sm text-[var(--color-muted)]">{table.capacity} kishi</div>
+                {activeOrder ? (
+                  <div className="mt-2 text-sm font-semibold text-[var(--color-text)]">#{activeOrder.orderNumber} · {activeOrder.waiter.name}</div>
+                ) : null}
+              </button>
             );
           })}
+          {visibleTables.length === 0 ? <Panel><div className="text-sm text-slate-500">Bu zonada stol yo'q</div></Panel> : null}
         </div>
       )}
 
-      {createOrderModal ? (
-        <Modal title="Yangi chek yaratish" onClose={() => setCreateOrderModal(false)}>
+      {selectedTable ? (
+        <Modal title={`Stol ${selectedTable.number} uchun chek`} onClose={closeCreateOrder}>
           <div className="space-y-3">
-            <select className="w-full rounded-md border px-3 py-2 text-sm" value={selectedTableId} onChange={(e) => setSelectedTableId(e.target.value)}>
-              <option value="">Stol tanlang</option>
-              {freeTables.map((t) => <option key={t.id} value={t.id}>Stol {t.number} · {t.zone.name}</option>)}
-            </select>
             <select className="w-full rounded-md border px-3 py-2 text-sm" value={selectedWaiterId} onChange={(e) => setSelectedWaiterId(e.target.value)}>
               <option value="">Ofitsiant tanlang</option>
               {waiters.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
             {waiters.length === 0 ? <div className="text-sm text-rose-600">Faol ofitsiant topilmadi. Chek yaratish uchun avval ofitsiant qo'shing.</div> : null}
 
-            <div className="max-h-48 overflow-y-auto rounded-md border p-2">
-              <div className="mb-1 text-xs font-semibold text-slate-500">Menyu</div>
-              {(menu.data?.items ?? []).map((item) => (
-                <button key={item.id} className="flex w-full items-center justify-between rounded px-2 py-1 text-sm hover:bg-slate-100" onClick={() => addToCart(item)}>
-                  <span>{item.emoji || "🍽"} {item.name}</span>
-                  <span className="text-xs text-slate-500">{item.price.toLocaleString("uz-UZ")}</span>
-                </button>
-              ))}
-            </div>
+            {!categoryId ? (
+              <div className="grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">
+                {categories.map((category) => (
+                  <button key={category.id} className="rounded-md border p-3 text-left text-sm hover:bg-slate-100" onClick={() => setCategoryId(category.id)}>
+                    <div className="font-semibold">{category.name}</div>
+                    <div className="text-xs text-slate-500">{category.count} ta taom</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <button className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-lg" aria-label="Orqaga" onClick={() => setCategoryId(null)}>←</button>
+                  <div className="text-sm font-semibold">{selectedCategory?.name}</div>
+                </div>
+                <div className="max-h-56 overflow-y-auto rounded-md border p-2">
+                  {categoryItems.map((item) => (
+                    <button key={item.id} className="flex w-full items-center justify-between rounded px-2 py-1 text-sm hover:bg-slate-100" onClick={() => addToCart(item)}>
+                      <span>{item.emoji || "🍽"} {item.name}</span>
+                      <span className="text-xs text-slate-500">{item.price.toLocaleString("uz-UZ")}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {cart.length > 0 ? (
               <div className="rounded-md border p-2">
