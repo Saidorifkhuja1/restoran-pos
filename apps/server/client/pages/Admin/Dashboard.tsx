@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -212,44 +212,74 @@ const placeGroups = [
 ] as const;
 
 type MapPoint = { lat: number; lng: number; x: number; y: number };
-type MapTile = { x: number; y: number; url: string; left: string; top: string };
 const INITIAL_MAP_CENTER = { lat: 41.311081, lng: 69.240562 };
-const MAP_ZOOM = 13;
-const TILE_SIZE = 256;
+const MAP_ZOOM = 15;
 
-function latLngToWorld(lat: number, lng: number, zoom: number) {
-  const sinLat = Math.sin((lat * Math.PI) / 180);
-  const scale = TILE_SIZE * 2 ** zoom;
-  return {
-    x: ((lng + 180) / 360) * scale,
-    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale,
-  };
-}
+type LeafletLatLng = { lat: number; lng: number };
+type LeafletMap = {
+  setView: (center: [number, number], zoom?: number, options?: { animate?: boolean }) => LeafletMap;
+  getZoom: () => number;
+  on: (event: "click", handler: (event: { latlng: LeafletLatLng }) => void) => LeafletMap;
+  off: (event: "click", handler: (event: { latlng: LeafletLatLng }) => void) => LeafletMap;
+  remove: () => void;
+  invalidateSize: () => void;
+};
+type LeafletMarker = {
+  addTo: (map: LeafletMap) => LeafletMarker;
+  setLatLng: (latLng: [number, number]) => LeafletMarker;
+  bindPopup: (label: string) => LeafletMarker;
+  on: (event: "dragend", handler: () => void) => LeafletMarker;
+  getLatLng: () => LeafletLatLng;
+  remove: () => void;
+};
+type LeafletApi = {
+  map: (element: HTMLElement, options: {
+    center: [number, number];
+    zoom: number;
+    zoomControl: boolean;
+    scrollWheelZoom: boolean;
+    dragging: boolean;
+    doubleClickZoom: boolean;
+    attributionControl: boolean;
+  }) => LeafletMap;
+  tileLayer: (url: string, options: { attribution: string }) => { addTo: (map: LeafletMap) => void };
+  marker: (latLng: [number, number], options?: { draggable?: boolean }) => LeafletMarker;
+  Icon: { Default: { prototype: { _getIconUrl?: unknown }; mergeOptions: (options: Record<string, string>) => void } };
+};
+type LeafletWindow = Window & { L?: LeafletApi; __restoposLeafletPromise?: Promise<LeafletApi> };
 
-function worldToLatLng(x: number, y: number, zoom: number) {
-  const scale = TILE_SIZE * 2 ** zoom;
-  const lng = (x / scale) * 360 - 180;
-  const n = Math.PI - (2 * Math.PI * y) / scale;
-  const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  return { lat, lng };
-}
+function loadLeaflet() {
+  const leafletWindow = window as LeafletWindow;
+  if (leafletWindow.L) return Promise.resolve(leafletWindow.L);
+  if (leafletWindow.__restoposLeafletPromise) return leafletWindow.__restoposLeafletPromise;
 
-function getMapTiles(center: { lat: number; lng: number }): { centerWorld: { x: number; y: number }; tiles: MapTile[] } {
-  const centerWorld = latLngToWorld(center.lat, center.lng, MAP_ZOOM);
-  const tiles = Array.from({ length: 63 }, (_, index) => {
-    const offsetX = (index % 9) - 4;
-    const offsetY = Math.floor(index / 9) - 3;
-    const tileX = Math.floor(centerWorld.x / TILE_SIZE) + offsetX;
-    const tileY = Math.floor(centerWorld.y / TILE_SIZE) + offsetY;
-    return {
-      x: tileX,
-      y: tileY,
-      url: `https://tile.openstreetmap.org/${MAP_ZOOM}/${tileX}/${tileY}.png`,
-      left: `calc(50% + ${tileX * TILE_SIZE - centerWorld.x}px)`,
-      top: `calc(50% + ${tileY * TILE_SIZE - centerWorld.y}px)`,
-    };
+  leafletWindow.__restoposLeafletPromise = new Promise<LeafletApi>((resolve, reject) => {
+    const existingCss = document.querySelector<HTMLLinkElement>('link[data-restopos-leaflet="true"]');
+    if (!existingCss) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
+      link.dataset.restoposLeaflet = "true";
+      document.head.appendChild(link);
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>('script[data-restopos-leaflet="true"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", () => leafletWindow.L ? resolve(leafletWindow.L) : reject(new Error("Leaflet yuklanmadi")), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Leaflet yuklanmadi")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
+    script.async = true;
+    script.dataset.restoposLeaflet = "true";
+    script.onload = () => leafletWindow.L ? resolve(leafletWindow.L) : reject(new Error("Leaflet yuklanmadi"));
+    script.onerror = () => reject(new Error("Leaflet yuklanmadi"));
+    document.head.appendChild(script);
   });
-  return { centerWorld, tiles };
+
+  return leafletWindow.__restoposLeafletPromise;
 }
 
 function splitAddressAndPoint(address?: string | null) {
@@ -1462,46 +1492,114 @@ function SettingsSection({ restaurant, currentUserId, t, queryClient }: { restau
 }
 
 function RestaurantMap({ point, address, readonly = false, onPointChange, onAddressChange }: { point: MapPoint | null; address: string; readonly?: boolean; onPointChange?: (point: MapPoint | null) => void; onAddressChange?: (address: string) => void }) {
-  const [mapCenter, setMapCenter] = useState(point ? { lat: point.lat, lng: point.lng } : INITIAL_MAP_CENTER);
   const [locationError, setLocationError] = useState("");
-  const dragRef = useRef<{ active: boolean; pointerId: number; startX: number; startY: number; centerWorld: { x: number; y: number }; moved: boolean } | null>(null);
-  const { centerWorld, tiles } = useMemo(() => getMapTiles(mapCenter), [mapCenter]);
-  const markerPosition = useMemo(() => {
-    if (!point) return null;
-    const markerWorld = latLngToWorld(point.lat, point.lng, MAP_ZOOM);
-    return {
-      left: `calc(50% + ${markerWorld.x - centerWorld.x}px)`,
-      top: `calc(50% + ${markerWorld.y - centerWorld.y}px)`,
-    };
-  }, [centerWorld.x, centerWorld.y, point]);
-
-  useEffect(() => {
-    if (point) setMapCenter({ lat: point.lat, lng: point.lng });
-  }, [point]);
+  const [mapError, setMapError] = useState("");
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const leafletRef = useRef<LeafletApi | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
 
   function setAddressFromPoint(nextPoint: MapPoint) {
     onAddressChange?.(address || "Tanlangan joy");
     onPointChange?.(nextPoint);
   }
 
-  function pickPoint(event: MouseEvent<HTMLDivElement>) {
-    if (readonly) return;
-    if (dragRef.current?.moved) {
-      dragRef.current = null;
-      return;
-    }
-    dragRef.current = null;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-    const worldPoint = worldToLatLng(centerWorld.x + x - rect.width / 2, centerWorld.y + y - rect.height / 2, MAP_ZOOM);
+  function selectPoint(latLng: LeafletLatLng) {
     setAddressFromPoint({
-      x: (x / rect.width) * 100,
-      y: (y / rect.height) * 100,
-      lat: worldPoint.lat,
-      lng: worldPoint.lng,
+      x: 50,
+      y: 50,
+      lat: latLng.lat,
+      lng: latLng.lng,
     });
   }
+
+  function updateMarker(leaflet: LeafletApi, map: LeafletMap, nextPoint: MapPoint | null) {
+    if (!nextPoint) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+
+    if (markerRef.current) {
+      markerRef.current.setLatLng([nextPoint.lat, nextPoint.lng]);
+    } else {
+      markerRef.current = leaflet.marker([nextPoint.lat, nextPoint.lng], { draggable: !readonly }).addTo(map);
+      if (!readonly) {
+        markerRef.current.on("dragend", () => {
+          const latLng = markerRef.current?.getLatLng();
+          if (latLng) selectPoint(latLng);
+        });
+      }
+    }
+
+    if (address) markerRef.current.bindPopup(address);
+  }
+
+  useEffect(() => {
+    const element = mapElementRef.current;
+    if (!element) return;
+
+    let cancelled = false;
+    let clickHandler: ((event: { latlng: LeafletLatLng }) => void) | null = null;
+
+    loadLeaflet()
+      .then((leaflet) => {
+        if (cancelled || !mapElementRef.current) return;
+        setMapError("");
+        leafletRef.current = leaflet;
+        delete leaflet.Icon.Default.prototype._getIconUrl;
+        leaflet.Icon.Default.mergeOptions({
+          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+        });
+
+        const center = point ? [point.lat, point.lng] as [number, number] : [INITIAL_MAP_CENTER.lat, INITIAL_MAP_CENTER.lng] as [number, number];
+        const map = leaflet.map(mapElementRef.current, {
+          center,
+          zoom: MAP_ZOOM,
+          zoomControl: true,
+          scrollWheelZoom: true,
+          dragging: true,
+          doubleClickZoom: true,
+          attributionControl: true,
+        });
+        leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(map);
+        mapRef.current = map;
+        updateMarker(leaflet, map, point);
+
+        if (!readonly) {
+          clickHandler = (event) => selectPoint(event.latlng);
+          map.on("click", clickHandler);
+        }
+
+        window.setTimeout(() => map.invalidateSize(), 0);
+      })
+      .catch(() => setMapError("Xarita yuklanmadi. Internet aloqasini tekshiring."));
+
+    return () => {
+      cancelled = true;
+      if (clickHandler) mapRef.current?.off("click", clickHandler);
+      markerRef.current?.remove();
+      markerRef.current = null;
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
+  }, [readonly]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const leaflet = leafletRef.current;
+    if (!map || !leaflet) return;
+
+    if (point) {
+      map.setView([point.lat, point.lng], map.getZoom(), { animate: false });
+    }
+    updateMarker(leaflet, map, point);
+    window.setTimeout(() => map.invalidateSize(), 0);
+  }, [point, address, readonly]);
 
   function useCurrentLocation() {
     if (readonly) return;
@@ -1513,7 +1611,6 @@ function RestaurantMap({ point, address, readonly = false, onPointChange, onAddr
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const nextPoint = { lat: position.coords.latitude, lng: position.coords.longitude, x: 50, y: 50 };
-        setMapCenter({ lat: nextPoint.lat, lng: nextPoint.lng });
         setAddressFromPoint(nextPoint);
       },
       () => setLocationError("Joylashuv ruxsati berilmadi yoki aniqlanmadi"),
@@ -1521,46 +1618,12 @@ function RestaurantMap({ point, address, readonly = false, onPointChange, onAddr
     );
   }
 
-  function startMapDrag(event: PointerEvent<HTMLDivElement>) {
-    if (readonly) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      active: true,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      centerWorld,
-      moved: false,
-    };
-  }
-
-  function moveMap(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (readonly || !drag?.active || drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
-    setMapCenter(worldToLatLng(drag.centerWorld.x - dx, drag.centerWorld.y - dy, MAP_ZOOM));
-  }
-
-  function endMapDrag(event: PointerEvent<HTMLDivElement>) {
-    if (dragRef.current?.pointerId === event.pointerId) {
-      const moved = dragRef.current.moved;
-      dragRef.current.active = false;
-      if (moved) {
-        window.setTimeout(() => {
-          if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
-        }, 0);
-      }
-    }
-  }
-
   return (
     <div className="overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-bg)]">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
         <div>
           <div className="text-sm font-bold text-[var(--color-text)]">Xaritadan joylashuv</div>
-          <div className="text-xs font-semibold text-[var(--color-muted)]">{readonly ? "Restoran joylashuvi" : "Nuqtani bosing yoki xaritani suring"}</div>
+          <div className="text-xs font-semibold text-[var(--color-muted)]">{readonly ? "Restoran joylashuvi" : "Nuqtani bosing yoki markerni suring"}</div>
         </div>
         {!readonly ? (
           <div className="flex items-center gap-2">
@@ -1569,26 +1632,9 @@ function RestaurantMap({ point, address, readonly = false, onPointChange, onAddr
           </div>
         ) : null}
       </div>
-      <div
-        className={readonly ? "relative h-72 overflow-hidden bg-[#dbe7d3]" : "relative h-72 touch-none cursor-grab overflow-hidden bg-[#dbe7d3] active:cursor-grabbing"}
-        onClick={pickPoint}
-        onPointerDown={startMapDrag}
-        onPointerMove={moveMap}
-        onPointerUp={endMapDrag}
-        onPointerCancel={endMapDrag}
-        role="button"
-        tabIndex={readonly ? -1 : 0}
-      >
-        {tiles.map((tile) => (
-          <img alt="" className="absolute h-64 w-64 select-none" draggable={false} key={`${tile.x}-${tile.y}`} src={tile.url} style={{ left: tile.left, top: tile.top }} />
-        ))}
-        <div className="absolute inset-0 bg-black/5" />
-        {point && markerPosition ? (
-          <div className="absolute -translate-x-1/2 -translate-y-full text-[#13EC37]" style={markerPosition}>
-            <MapPin size={34} fill="#13EC37" className="drop-shadow-[0_8px_18px_rgba(19,236,55,0.45)]" />
-          </div>
-        ) : null}
-        <div className="absolute bottom-2 right-2 rounded bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">© OpenStreetMap contributors</div>
+      <div className="relative h-72 overflow-hidden bg-[#f3f4f6] dark:bg-[#1a1a1a]">
+        <div ref={mapElementRef} className="h-full w-full" />
+        {mapError ? <div className="absolute inset-0 grid place-items-center bg-[var(--color-bg)] px-4 text-center text-sm font-semibold text-rose-300">{mapError}</div> : null}
       </div>
       {point ? <div className="border-t border-[var(--color-border)] px-4 py-3 text-xs font-semibold text-[var(--color-muted)]">Tanlangan koordinata: {point.lat.toFixed(6)}, {point.lng.toFixed(6)}</div> : null}
       {locationError ? <div className="border-t border-[var(--color-border)] px-4 py-3 text-xs font-semibold text-rose-300">{locationError}</div> : null}
