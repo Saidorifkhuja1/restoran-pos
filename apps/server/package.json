@@ -14,7 +14,6 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:push": "prisma db push",
-    "seed": "node prisma/seed.js",
     "worker:reports": "node --import tsx scripts/report-worker.ts"
   },
   "dependencies": {
@@ -58,8 +57,5 @@
     "tailwindcss": "^3.3.0",
     "tsx": "^4.20.6",
     "typescript": "^5.3.0"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.js"
   }
 }

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { UserRole } from "@restopos/types";
 import { getData, Paginated } from "@/client/api/client";
 import { Badge, PageTitle, Panel } from "@/client/components/ui";
 import { usePusherEvent } from "@/client/hooks/usePusher";
@@ -37,30 +36,6 @@ const toneByStatus = {
 
 type Translation = (typeof dictionary)[keyof typeof dictionary];
 
-const waiterSections = [
-  { id: "cabins", title: "Kabinetlar", aliases: ["kabinet", "vip", "xona"] },
-  { id: "hall", title: "Zal", aliases: ["zal", "asosiy"] },
-  { id: "street", title: "Ko'cha", aliases: ["ko'cha", "kocha", "terassa", "terrace", "outdoor"] },
-] as const;
-
-type WaiterSectionId = (typeof waiterSections)[number]["id"];
-
-function tableBelongsToSection(table: Table, sectionId: WaiterSectionId): boolean {
-  const zoneName = table.zone.name.toLowerCase();
-  const section = waiterSections.find((item) => item.id === sectionId);
-  if (!section) return false;
-  if (sectionId === "hall") {
-    return !waiterSections
-      .filter((item) => item.id !== "hall")
-      .some((item) => item.aliases.some((alias) => zoneName.includes(alias)));
-  }
-  return section.aliases.some((alias) => zoneName.includes(alias));
-}
-
-function orderBelongsToSection(order: ActiveOrder, sectionId: WaiterSectionId): boolean {
-  return tableBelongsToSection({ id: order.table.id, number: order.table.number, capacity: 0, status: order.table.status as Table["status"], zone: { ...order.table.zone, color: "" } }, sectionId);
-}
-
 function tableStatusLabel(status: Table["status"], t: Translation): string {
   const labels = {
     FREE: t.statusFree,
@@ -83,19 +58,7 @@ function orderStatusLabel(status: string, t: Translation): string {
   return labels[status] || status;
 }
 
-function placeLabel(sectionId?: WaiterSectionId | null): string {
-  if (sectionId === "cabins") return "Kabina";
-  if (sectionId === "street") return "Tapchan";
-  return "Stol";
-}
-
-function sectionTitle(sectionId: WaiterSectionId | null, fallback: string): string {
-  if (sectionId === "cabins") return "Kabinalar";
-  if (sectionId === "street") return "Tapchanlar";
-  return fallback;
-}
-
-function ActiveChecks({ orders, title, t, placeName = "Stol" }: { orders: ActiveOrder[]; title: string; t: Translation; placeName?: string }) {
+function ActiveChecks({ orders, title, t }: { orders: ActiveOrder[]; title: string; t: Translation }) {
   if (orders.length === 0) return null;
   return (
     <div className="mt-5">
@@ -106,7 +69,7 @@ function ActiveChecks({ orders, title, t, placeName = "Stol" }: { orders: Active
           return (
             <Panel key={order.id} className="p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="font-semibold">#{order.orderNumber} · {placeName} {order.table.number}</div>
+                <div className="font-semibold">#{order.orderNumber} · {t.table} {order.table.number}</div>
                 <Badge tone={order.status === "READY" ? "green" : order.status === "BILL" ? "red" : "yellow"}>{orderStatusLabel(order.status, t)}</Badge>
               </div>
               <div className="mt-1 text-sm text-[var(--color-muted)]">{order.table.zone.name} · {order.waiter.name}</div>
@@ -122,10 +85,10 @@ function ActiveChecks({ orders, title, t, placeName = "Stol" }: { orders: Active
 export function TablesPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { restaurant, user } = useAuthStore();
+  const { restaurant } = useAuthStore();
   const language = usePreferencesStore((state) => state.settings.language);
   const t = dictionary[language];
-  const [selectedWaiterSection, setSelectedWaiterSection] = useState<WaiterSectionId | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   usePusherEvent(restaurant?.id ? `restaurant:${restaurant.id}` : null, "table:status", () => {
     void queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] });
   });
@@ -140,28 +103,48 @@ export function TablesPage() {
     queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&scope=restaurant&limit=100"),
     refetchInterval: 10_000,
   });
+  const zones = useMemo(() => {
+    const grouped = new Map<string, { id: string; name: string; color: string; total: number; busy: number }>();
+    (tables.data?.items ?? []).forEach((table) => {
+      const current = grouped.get(table.zone.id) ?? { id: table.zone.id, name: table.zone.name, color: table.zone.color, total: 0, busy: 0 };
+      grouped.set(table.zone.id, {
+        ...current,
+        total: current.total + 1,
+        busy: current.busy + (table.status === "FREE" ? 0 : 1),
+      });
+    });
+    return Array.from(grouped.values());
+  }, [tables.data?.items]);
+  const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
   const visibleTables = useMemo(() => {
-    if (user?.role !== UserRole.WAITER || !selectedWaiterSection) return tables.data?.items ?? [];
-    return (tables.data?.items ?? []).filter((table) => tableBelongsToSection(table, selectedWaiterSection));
-  }, [selectedWaiterSection, tables.data?.items, user?.role]);
+    if (!selectedZoneId) return [];
+    return (tables.data?.items ?? []).filter((table) => table.zone.id === selectedZoneId);
+  }, [selectedZoneId, tables.data?.items]);
+  const activeOrdersForView = useMemo(() => {
+    const items = activeOrders.data?.items ?? [];
+    if (!selectedZoneId) return items;
+    return items.filter((order) => order.table.zone.id === selectedZoneId);
+  }, [activeOrders.data?.items, selectedZoneId]);
 
-  if (user?.role === UserRole.WAITER && !selectedWaiterSection) {
+  if (!selectedZoneId) {
     return (
       <>
         <PageTitle title={t.sections} subtitle={t.selectTablePlace} />
-        <div className="grid gap-3 sm:grid-cols-3">
-          {waiterSections.map((section) => (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {zones.map((zone) => (
             <button
-              key={section.id}
+              key={zone.id}
               className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-left text-[var(--color-text)] shadow-sm transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
-              onClick={() => setSelectedWaiterSection(section.id)}
+              onClick={() => setSelectedZoneId(zone.id)}
             >
-              <div className="text-2xl font-semibold text-[var(--color-text)]">{section.id === "cabins" ? t.cabins : section.id === "hall" ? t.hall : t.street}</div>
+              <div className="mb-4 h-3 w-12 rounded-full" style={{ backgroundColor: zone.color || "#0f766e" }} />
+              <div className="text-2xl font-semibold text-[var(--color-text)]">{zone.name}</div>
               <div className="mt-2 text-sm text-[var(--color-muted)]">
-                {(activeOrders.data?.items ?? []).filter((order) => orderBelongsToSection(order, section.id)).length} active chek
+                {zone.total} stol · {zone.busy} band
               </div>
             </button>
           ))}
+          {zones.length === 0 ? <div className="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">{t.emptySection}</div> : null}
         </div>
         <ActiveChecks orders={activeOrders.data?.items ?? []} title="Active cheklar" t={t} />
       </>
@@ -171,12 +154,10 @@ export function TablesPage() {
   return (
     <>
       <div className="mb-4">
-        {user?.role === UserRole.WAITER ? (
-          <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700" aria-label={t.back} onClick={() => setSelectedWaiterSection(null)}>
-            ←
-          </button>
-        ) : null}
-        <PageTitle title={user?.role === UserRole.WAITER ? sectionTitle(selectedWaiterSection, t.tables) : t.tables} subtitle={user?.role === UserRole.WAITER ? undefined : "Zal xaritasi va stol holatlari"} />
+        <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700" aria-label={t.back} onClick={() => setSelectedZoneId(null)}>
+          ←
+        </button>
+        <PageTitle title={selectedZone?.name || t.tables} subtitle={undefined} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {visibleTables.map((table) => {
@@ -185,7 +166,7 @@ export function TablesPage() {
             <Panel key={table.id} className={isBusy ? "border-rose-500 bg-rose-950/10 ring-1 ring-rose-500/50" : undefined}>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <div className={isBusy ? "text-xl font-semibold text-rose-600 dark:text-rose-300" : "text-xl font-semibold"}>{placeLabel(selectedWaiterSection)} {table.number}</div>
+                  <div className={isBusy ? "text-xl font-semibold text-rose-600 dark:text-rose-300" : "text-xl font-semibold"}>{t.table} {table.number}</div>
                 </div>
                 <Badge tone={toneByStatus[table.status]}>{tableStatusLabel(table.status, t)}</Badge>
               </div>
@@ -202,10 +183,9 @@ export function TablesPage() {
         {visibleTables.length === 0 ? <div className="rounded-md border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">{t.emptySection}</div> : null}
       </div>
       <ActiveChecks
-        orders={selectedWaiterSection ? (activeOrders.data?.items ?? []).filter((order) => orderBelongsToSection(order, selectedWaiterSection)) : activeOrders.data?.items ?? []}
+        orders={activeOrdersForView}
         title="Active cheklar"
         t={t}
-        placeName={placeLabel(selectedWaiterSection)}
       />
     </>
   );

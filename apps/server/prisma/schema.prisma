@@ -508,7 +508,7 @@ model Discount {
   restaurantId    String
   restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  name            String   // "VIP mijoz", "Lunch", "Tug'ilgan kun"
+  name            String
   type            DiscountType
   value           Int      // 10 (%) yoki 50000 (so'm)
 

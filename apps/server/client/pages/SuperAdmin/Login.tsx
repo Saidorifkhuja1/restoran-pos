@@ -89,12 +89,6 @@ export function SuperAdminLogin() {
           </div>
           <p className="mb-3 min-h-4 text-xs text-rose-300">{form.formState.errors.password?.message}</p>
 
-          <div className="mb-4 rounded-[16px] border border-[#263854] bg-[#0b1220] p-3 text-sm">
-            <div className="font-bold text-slate-200">Demo kirish</div>
-            <div className="mt-1 text-slate-400">Email: superadmin@restopos.uz</div>
-            <div className="text-slate-400">Parol: Super12345</div>
-          </div>
-
           {form.formState.errors.root?.message ? <p className="mb-3 rounded-[12px] bg-rose-400/10 px-3 py-2 text-sm text-rose-300">{form.formState.errors.root.message}</p> : null}
           <button disabled={form.formState.isSubmitting} className="h-12 w-full rounded-[16px] bg-[#13EC37] px-3 text-sm font-black text-[#121417] transition active:scale-[0.99] disabled:opacity-60">
             {form.formState.isSubmitting ? "Kirilmoqda..." : "Kirish"}
