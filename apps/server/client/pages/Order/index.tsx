@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";
 import { useAuthStore } from "@/client/store/authStore";
@@ -58,7 +58,6 @@ function orderStatusLabel(status: string, t: Translation): string {
 
 export function OrderPage(props: OrderPageProps = {}) {
   const queryClient = useQueryClient();
-  const router = useRouter();
   const params = useParams<{ orderId?: string; tableId?: string }>();
   const searchParams = useSearchParams();
   const orderId = props.orderId || params.orderId;
@@ -116,7 +115,7 @@ export function OrderPage(props: OrderPageProps = {}) {
       });
       return response.data.data.id;
     },
-    onSuccess: async (createdOrderId) => {
+    onSuccess: async () => {
       setCart([]);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] }),
@@ -124,7 +123,11 @@ export function OrderPage(props: OrderPageProps = {}) {
         queryClient.invalidateQueries({ queryKey: ["active-orders", restaurant?.id] }),
         queryClient.invalidateQueries({ queryKey: ["order", orderId] }),
       ]);
-      if (createdOrderId) router.replace(`/orders/${createdOrderId}`);
+      window.location.href = "/tables";
+    },
+    onError: (error) => {
+      console.error("[Order Error]", error);
+      alert(error instanceof Error ? error.message : "Buyurtma yaratishda xato");
     },
   });
   function addToCart(item: MenuItem) {

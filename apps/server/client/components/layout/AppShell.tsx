@@ -55,19 +55,13 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       router.replace("/superadmin/dashboard");
     }
   }, [router, user?.role]);
-  useEffect(() => {
-    if (hydrated && !user) {
-      router.replace("/login");
-    }
-  }, [hydrated, router, user]);
   async function handleLogout() {
     await apiClient.post("/auth/logout").catch(() => undefined);
     logout();
     setProfileOpen(false);
     setSettingsOpen(null);
     setProfilePanel(null);
-    router.replace("/login");
-    router.refresh();
+    window.location.href = "/login";
   }
   function openPanel(panel: Exclude<ProfilePanel, null>) {
     setProfilePanel(panel);
@@ -92,7 +86,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", themeMode === "dark");
   }, [themeMode]);
 
-  if (!hydrated) {
+  if (!hydrated || !user) {
     return (
       <div className="grid min-h-screen place-items-center bg-[#050916] text-white">
         <div className="text-sm font-bold text-slate-300">Yuklanmoqda...</div>

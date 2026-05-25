@@ -19,7 +19,7 @@ const tableSchema = z.object({
   posY: z.number().default(0),
 });
 
-const allowedRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] as const;
+const allowedRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
 const writeRoles = [UserRole.ADMIN, UserRole.MANAGER] as const;
 
 export async function GET(request: NextRequest, context: RouteParams) {

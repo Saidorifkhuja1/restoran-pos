@@ -56,9 +56,6 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     if (token.role === UserRole.KITCHEN && nextStatus !== "READY") {
       return forbidden("KDS faqat READY statusini o'zgartiradi");
     }
-    if (token.role === UserRole.CASHIER) {
-      return forbidden("Kassir faqat to'lov orqali statusni o'zgartiradi");
-    }
     if (token.role === UserRole.WAITER && !["IN_KITCHEN", "BILL"].includes(nextStatus)) {
       return forbidden("Bu statusni o'zgartirishga ruxsat yo'q");
     }

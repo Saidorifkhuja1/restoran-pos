@@ -1,5 +1,5 @@
-import { CashierPage } from "@/client/pages/Cashier";
+import { CashierDashboard } from "@/client/pages/Cashier/CashierDashboard";
 
 export default function CashierRoutePage() {
-  return <CashierPage />;
+  return <CashierDashboard />;
 }

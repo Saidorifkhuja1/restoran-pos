@@ -14,7 +14,7 @@ const itemSchema = z.object({
   note: z.string().max(300).optional(),
 });
 
-const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] as const;
+const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
 
 export async function POST(request: NextRequest, context: RouteParams) {
   try {

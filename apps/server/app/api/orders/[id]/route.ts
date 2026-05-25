@@ -66,14 +66,14 @@ export async function GET(request: NextRequest, context: RouteParams) {
 export async function PUT(request: NextRequest, context: RouteParams) {
   try {
     const params = await context.params;
-    const token = await getRestaurantToken(request, [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] as const);
+    const token = await getRestaurantToken(request, [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const);
     if (!token) return unauthorized("Kirish uchun login qiling");
 
     const parsed = updateOrderSchema.safeParse(await request.json());
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
 
     const existing = await prisma.order.findFirst({
-      where: { id: params.id, restaurantId: token.restaurantId },
+      where: { id: params.id, restaurantId: token.restaurantId, ...(token.role === UserRole.WAITER ? { waiterId: token.userId } : {}) },
       select: { id: true },
     });
     if (!existing) return notFound("Buyurtma topilmadi");

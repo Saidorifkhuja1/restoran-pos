@@ -7,7 +7,7 @@ import { UserRole } from "@restopos/types";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
-const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] as const;
+const roles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
 
 export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
@@ -16,7 +16,7 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (!token) return unauthorized("Kirish uchun login qiling");
 
     const order = await prisma.order.findFirst({
-      where: { id: params.id, restaurantId: token.restaurantId },
+      where: { id: params.id, restaurantId: token.restaurantId, ...(token.role === UserRole.WAITER ? { waiterId: token.userId } : {}) },
       select: { id: true, status: true },
     });
     if (!order) return notFound("Buyurtma topilmadi");

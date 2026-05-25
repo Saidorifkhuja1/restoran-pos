@@ -292,9 +292,8 @@ function splitAddressAndPoint(address?: string | null) {
   };
 }
 
-function composeAddress(address: string, point: MapPoint | null) {
-  const base = address.trim() || "Tanlangan joy";
-  return point ? `${base} | ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}` : base;
+function composeAddress(address: string, _point: MapPoint | null) {
+  return address.trim() || "";
 }
 
 function classifyZone(name: string) {
@@ -1499,9 +1498,22 @@ function RestaurantMap({ point, address, readonly = false, onPointChange, onAddr
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
 
+  async function reverseGeocode(lat: number, lng: number): Promise<string> {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=uz,ru`);
+      if (!res.ok) return "";
+      const data = await res.json() as { display_name?: string };
+      return data.display_name || "";
+    } catch {
+      return "";
+    }
+  }
+
   function setAddressFromPoint(nextPoint: MapPoint) {
-    onAddressChange?.(address || "Tanlangan joy");
     onPointChange?.(nextPoint);
+    reverseGeocode(nextPoint.lat, nextPoint.lng).then((addr) => {
+      if (addr) onAddressChange?.(addr);
+    });
   }
 
   function selectPoint(latLng: LeafletLatLng) {

@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     const token = auth.token as UserToken;
 
-    if (!["ADMIN", "MANAGER"].includes(token.role)) {
+    if (!["ADMIN", "MANAGER", "CASHIER"].includes(token.role)) {
       return forbidden("Ruxsat kerak");
     }
 

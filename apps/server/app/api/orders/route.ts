@@ -17,6 +17,7 @@ const orderItemSchema = z.object({
 const createOrderSchema = z.object({
   tableId: z.string().min(1),
   reservationId: z.string().min(1).optional(),
+  waiterId: z.string().min(1).optional(),
   guestCount: z.number().int().positive(),
   note: z.string().max(500).optional(),
   items: z.array(orderItemSchema).min(1),
@@ -27,7 +28,7 @@ const orderStatusQuerySchema = z
   .optional();
 
 const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER] as const;
-const createRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER] as const;
+const createRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
 
 export async function GET(request: NextRequest) {
   try {
@@ -109,6 +110,27 @@ export async function POST(request: NextRequest) {
     if (!table) return badRequest("Stol topilmadi");
     if (table.status !== "FREE") return forbidden("Bu joy band. To'lov qilinmaguncha yangi chek ochib bo'lmaydi");
 
+    let waiterId = token.userId;
+    if (token.role === UserRole.CASHIER) {
+      if (!data.waiterId) return badRequest("Kassir chek yaratishi uchun ofitsiant tanlash majburiy");
+      const waiter = await prisma.user.findFirst({
+        where: { id: data.waiterId, restaurantId: token.restaurantId, role: UserRole.WAITER, isActive: true },
+        select: { id: true },
+      });
+      if (!waiter) return badRequest("Ofitsiant topilmadi");
+      waiterId = waiter.id;
+    } else if (data.waiterId) {
+      if (token.role === UserRole.WAITER && data.waiterId !== token.userId) {
+        return forbidden("Boshqa ofitsiant nomidan chek yaratib bo'lmaydi");
+      }
+      const waiter = await prisma.user.findFirst({
+        where: { id: data.waiterId, restaurantId: token.restaurantId, role: UserRole.WAITER, isActive: true },
+        select: { id: true },
+      });
+      if (!waiter) return badRequest("Ofitsiant topilmadi");
+      waiterId = waiter.id;
+    }
+
     const menuItems = await prisma.menuItem.findMany({
       where: {
         restaurantId: token.restaurantId,
@@ -135,7 +157,7 @@ export async function POST(request: NextRequest) {
           restaurantId: token.restaurantId,
           tableId: data.tableId,
           reservationId: data.reservationId,
-          waiterId: token.userId,
+          waiterId,
           orderNumber: counter.orderSeq,
           guestCount: data.guestCount,
           note: data.note,
