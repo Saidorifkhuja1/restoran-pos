@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const today = await buildReportSummary(token.restaurantId, utcDayStart(now), now);
-    const [restaurant, staff, zones, tables, categories, menuItems, suppliers, expenses, orders] = await Promise.all([
+    const [restaurant, staff, zones, tables, categories, menuItems, suppliers, expenses, expenseTotal, orders] = await Promise.all([
       prisma.restaurant.findFirst({
         where: { id: token.restaurantId, isActive: true },
         select: { id: true, name: true, type: true, logo: true, address: true, phone: true, taxId: true, taxPercent: true, currency: true, receiptFooter: true },
@@ -56,6 +56,10 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
+      prisma.expense.aggregate({
+        where: { restaurantId: token.restaurantId, isActive: true },
+        _sum: { amount: true },
+      }),
       prisma.order.findMany({
         where: { restaurantId: token.restaurantId },
         select: {
@@ -73,7 +77,18 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return success({ restaurant, summary: today.summary, staff, zones, tables, categories, menuItems, suppliers, expenses, orders });
+    return success({
+      restaurant,
+      summary: { ...today.summary, expenses: expenseTotal._sum.amount || 0 },
+      staff,
+      zones,
+      tables,
+      categories,
+      menuItems,
+      suppliers,
+      expenses,
+      orders,
+    });
   } catch (error) {
     console.error("[Admin Overview Error]", error);
     return serverError("Admin dashboard ma'lumotlarini olishda xato");
