@@ -9,10 +9,11 @@ import { writeAuditLog } from "@/lib/audit";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createStaffSchema = z.object({
-  name: z.string().min(2, "Nom kamida 2 ta harf bo'lishi kerak"),
-  phone: z.string().optional(),
-  pin: z.string().optional(),
+  name: z.string().trim().min(2, "Nom kamida 2 ta harf bo'lishi kerak"),
+  phone: z.string().trim().optional(),
+  pin: z.string().trim().optional(),
   password: z.string()
+    .trim()
     .min(8, "Parol kamida 8 ta belgi bo'lishi kerak")
     .regex(/[A-Z]/, "Parolda katta harf bo'lishi kerak")
     .regex(/[a-z]/, "Parolda kichik harf bo'lishi kerak")
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
       data: {
         restaurantId: token.restaurantId,
         name: data.name,
-        phone: data.phone,
+        phone: data.phone || null,
         pin: hashedPin,
         role: data.role,
         createdBy: token.userId,

@@ -458,13 +458,23 @@ export function AdminDashboard() {
   ];
 
   const createStaff = useMutation({
-    mutationFn: () => apiClient.post("/admin/staff", { name: staffName, phone: staffPhone || undefined, pin: staffPassword, role: staffRole }),
+    mutationFn: () => {
+      const credentialKey = staffRole === UserRole.ADMIN ? "password" : "pin";
+      return apiClient.post("/admin/staff", {
+        name: staffName.trim(),
+        phone: staffPhone.trim() || undefined,
+        [credentialKey]: staffPassword.trim(),
+        role: staffRole,
+      });
+    },
     onSuccess: async () => {
-      setStaffName(""); setStaffPhone(""); setStaffPassword(""); setStaffRole(UserRole.WAITER); setModal(null);
+      setStaffName(""); setStaffPhone(""); setStaffPassword(""); setStaffRole(UserRole.WAITER); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
     onError: (error) => {
       if (isUnauthorized(error)) router.replace("/admin/login");
+      const msg = error instanceof AxiosError ? error.response?.data?.error : undefined;
+      setFormError(msg || "Xodim yaratishda xato");
     },
   });
   const createCategory = useMutation({
@@ -584,7 +594,11 @@ export function AdminDashboard() {
 
     if (modal === "staff") {
       if (!staffName.trim() || !staffPassword.trim()) {
-        setFormError("Ism va parol majburiy");
+        setFormError(staffRole === UserRole.ADMIN ? "Ism va parol majburiy" : "Ism va PIN majburiy");
+        return;
+      }
+      if (staffRole !== UserRole.ADMIN && !/^\d{4,}$/.test(staffPassword.trim())) {
+        setFormError("PIN kamida 4 ta raqam bo'lishi kerak");
         return;
       }
       createStaff.mutate();
@@ -823,10 +837,21 @@ export function AdminDashboard() {
                 <>
                   <Input placeholder={t.name} value={staffName} onChange={setStaffName} />
                   <Input placeholder={t.phone} value={staffPhone} onChange={setStaffPhone} />
-                  <Input placeholder="Parol" type="password" value={staffPassword} onChange={setStaffPassword} />
+                  <Input
+                    placeholder={staffRole === UserRole.ADMIN ? "Kuchli parol" : "PIN"}
+                    type="password"
+                    inputMode={staffRole === UserRole.ADMIN ? undefined : "numeric"}
+                    value={staffPassword}
+                    onChange={(value) => setStaffPassword(staffRole === UserRole.ADMIN ? value : value.replace(/\D/g, ""))}
+                  />
                   <SelectField label={t.role} value={staffRole} onChange={(value) => setStaffRole(value as UserRole)}>
                     <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
                   </SelectField>
+                  <div className="rounded-[12px] bg-[var(--color-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-muted)]">
+                    {staffRole === UserRole.ADMIN
+                      ? "Admin paroli kamida 8 belgi, katta/kichik harf, raqam va maxsus belgidan iborat bo'lishi kerak."
+                      : "Ofitsiant, kassir va oshxona uchun PIN faqat raqam bo'ladi, kamida 4 ta raqam kiriting."}
+                  </div>
                 </>
               ) : null}
               {modal === "category" ? <Input placeholder={t.categoryName} value={categoryName} onChange={setCategoryName} /> : null}
