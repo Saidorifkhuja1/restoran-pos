@@ -18,6 +18,13 @@ type Table = {
   zone: { id: string; name: string; color?: string | null };
 };
 type Staff = { id: string; name: string; role: string };
+type MenuCategory = {
+  id: string;
+  name: string;
+  emoji?: string | null;
+  isActive: boolean;
+  _count?: { items: number };
+};
 type MenuItem = {
   id: string;
   name: string;
@@ -150,6 +157,11 @@ export function CashierDashboard() {
     queryKey: ["cashier-staff"],
     queryFn: () => getData<Paginated<Staff>>("/admin/staff?limit=100"),
   });
+  const menuCategories = useQuery({
+    queryKey: ["cashier-menu-categories", restaurant?.id],
+    enabled: Boolean(restaurant?.id),
+    queryFn: () => getData<Paginated<MenuCategory>>(`/restaurants/${restaurant?.id}/menu/categories?limit=100`),
+  });
   const menu = useQuery({
     queryKey: ["cashier-menu", restaurant?.id],
     enabled: Boolean(restaurant?.id),
@@ -180,13 +192,19 @@ export function CashierDashboard() {
     return map;
   }, [orders.data?.items]);
   const categories = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; count: number }>();
+    const itemCounts = new Map<string, number>();
     (menu.data?.items ?? []).forEach((item) => {
-      const existing = seen.get(item.category.id);
-      seen.set(item.category.id, { id: item.category.id, name: item.category.name, count: (existing?.count ?? 0) + 1 });
+      itemCounts.set(item.category.id, (itemCounts.get(item.category.id) ?? 0) + 1);
     });
-    return Array.from(seen.values());
-  }, [menu.data?.items]);
+    return (menuCategories.data?.items ?? [])
+      .filter((category) => category.isActive)
+      .map((category) => ({
+        id: category.id,
+        name: category.name,
+        emoji: category.emoji,
+        count: itemCounts.get(category.id) ?? category._count?.items ?? 0,
+      }));
+  }, [menu.data?.items, menuCategories.data?.items]);
   const selectedCategory = categories.find((category) => category.id === categoryId);
   const categoryItems = categoryId ? (menu.data?.items ?? []).filter((item) => item.category.id === categoryId) : [];
   const activeOrdersForView = useMemo(() => {
@@ -276,7 +294,7 @@ export function CashierDashboard() {
                       className="min-h-[150px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:shadow-md active:scale-[0.99]"
                       onClick={() => setCategoryId(category.id)}
                     >
-                      <div className="mb-4 text-4xl">🍽</div>
+                      <div className="mb-4 text-4xl">{category.emoji || "🍽"}</div>
                       <div className="text-lg font-bold text-[var(--color-text)]">{category.name}</div>
                       <div className="mt-1 text-sm text-[var(--color-muted)]">{category.count} ta taom</div>
                     </button>
