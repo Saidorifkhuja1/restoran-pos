@@ -11,6 +11,10 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   config.headers.set("X-RestoPOS-CSRF", "same-origin");
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers.set("Authorization", `Bearer ${token}`);
+  }
   return config;
 });
 

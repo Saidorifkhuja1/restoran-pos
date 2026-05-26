@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
         currency: user.restaurant.currency,
         taxPercent: user.restaurant.taxPercent,
       },
+      token,
     });
 
     return setAuthCookie(response, token);

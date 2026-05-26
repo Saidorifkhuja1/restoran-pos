@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { UserRole } from "@restopos/types";
 
 export type AuthRole = UserRole | "SUPERADMIN";
@@ -24,8 +24,9 @@ export type AuthRestaurant = {
 type AuthState = {
   user: AuthUser | null;
   restaurant: AuthRestaurant | null;
+  token: string | null;
   hydrated: boolean;
-  setAuth: (payload: { user: AuthUser; restaurant?: AuthRestaurant | null }) => void;
+  setAuth: (payload: { user: AuthUser; restaurant?: AuthRestaurant | null; token?: string }) => void;
   setHydrated: (hydrated: boolean) => void;
   logout: () => void;
 };
@@ -35,23 +36,28 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       restaurant: null,
+      token: null,
       hydrated: false,
       setAuth: (payload) => {
-        set({
+        set((state) => ({
           user: payload.user,
           restaurant: payload.restaurant || null,
+          token: payload.token ?? state.token,
           hydrated: true,
-        });
+        }));
       },
       setHydrated: (hydrated) => set({ hydrated }),
       logout: () => {
-        set({ user: null, restaurant: null, hydrated: true });
+        set({ user: null, restaurant: null, token: null, hydrated: true });
       },
     }),
     {
       name: "restopos-auth",
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
+        user: state.user,
         restaurant: state.restaurant,
+        token: state.token,
       }),
     }
   )

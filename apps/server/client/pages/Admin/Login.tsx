@@ -10,6 +10,7 @@ import { UserRole } from "@restopos/types";
 type LoginResponse = {
   user: AuthUser;
   restaurant: AuthRestaurant;
+  token: string;
 };
 
 const loginSchema = z.object({
@@ -37,8 +38,8 @@ export function AdminLogin() {
   async function onSubmit(values: LoginForm) {
     try {
       const response = await apiClient.post<ApiEnvelope<LoginResponse>>("/auth/login", values);
-      const { user, restaurant } = response.data.data;
-      setAuth({ user, restaurant });
+      const { user, restaurant, token } = response.data.data;
+      setAuth({ user, restaurant, token });
       window.location.href = homePathByRole(user.role);
     } catch {
       form.setError("root", { message: "Login yoki parol noto'g'ri" });

@@ -9,6 +9,7 @@ import { AuthUser, useAuthStore } from "@/client/store/authStore";
 
 type LoginResponse = {
   superAdmin: { id: string; email: string; name: string };
+  token: string;
 };
 
 const superAdminLoginSchema = z.object({
@@ -34,7 +35,7 @@ export function SuperAdminLogin() {
         email: response.data.data.superAdmin.email,
         role: "SUPERADMIN",
       };
-      setAuth({ user });
+      setAuth({ user, token: response.data.data.token });
       window.location.href = "/superadmin/dashboard";
     } catch {
       form.setError("root", { message: "Email yoki parol noto'g'ri" });

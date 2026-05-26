@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         email: superAdmin.email,
         name: superAdmin.name,
       },
+      token,
     }), token);
   } catch (error) {
     console.error("[SuperAdmin Login Error]", error);
