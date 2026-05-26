@@ -49,6 +49,9 @@ type CartItem = { menuItemId: string; name: string; price: number; quantity: num
 type Discount = { id: string; name: string; type: "PERCENT" | "FIXED"; value: number };
 type Settings = { autoPrintReceipt: boolean };
 type PaymentResponse = { receiptNumber?: string | null; method: "CASH" | "CARD" | "QR" | "MIXED"; totalAmount: number };
+type OrderPeriodFilter = "all" | "day" | "week" | "month" | "year";
+
+const orderStatuses = ["OPEN", "IN_KITCHEN", "READY", "BILL", "PAID", "CANCELLED"];
 
 const paymentSchema = z.object({
   method: z.enum(["CASH", "CARD", "QR", "MIXED"]),
@@ -69,11 +72,39 @@ function orderStatusTone(status: string): "green" | "yellow" | "red" {
   return "yellow";
 }
 
+function isOrderInPeriod(createdAt: string, period: OrderPeriodFilter) {
+  if (period === "all") return true;
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+
+  if (period === "day") {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  }
+  if (period === "month") {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  }
+  if (period === "year") {
+    return date.getFullYear() === now.getFullYear();
+  }
+
+  const startOfWeek = new Date(now);
+  const day = startOfWeek.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  startOfWeek.setDate(startOfWeek.getDate() + diffToMonday);
+  startOfWeek.setHours(0, 0, 0, 0);
+  return date >= startOfWeek && date <= now;
+}
+
 function ActiveChecks({ orders, title, onOpen }: { orders: ActiveOrder[]; title: string; onOpen: (order: ActiveOrder) => void }) {
-  if (orders.length === 0) return null;
   return (
     <div className="mt-5">
       <div className="mb-2 text-sm font-semibold text-[var(--color-muted)]">{title}</div>
+      {orders.length === 0 ? (
+        <Panel>
+          <div className="text-sm text-[var(--color-muted)]">Filter bo'yicha chek topilmadi</div>
+        </Panel>
+      ) : null}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {orders.map((order) => (
           <button
@@ -90,6 +121,73 @@ function ActiveChecks({ orders, title, onOpen }: { orders: ActiveOrder[]; title:
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CheckFilters({
+  status,
+  waiterId,
+  period,
+  waiters,
+  onStatusChange,
+  onWaiterChange,
+  onPeriodChange,
+}: {
+  status: string;
+  waiterId: string;
+  period: OrderPeriodFilter;
+  waiters: Staff[];
+  onStatusChange: (value: string) => void;
+  onWaiterChange: (value: string) => void;
+  onPeriodChange: (value: OrderPeriodFilter) => void;
+}) {
+  return (
+    <div className="mt-4 grid gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm sm:grid-cols-3">
+      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Chek statusi
+        <select
+          className="h-10 rounded-md border border-[var(--color-border)] bg-[var(--color-surface2)] px-3 text-sm font-semibold normal-case text-[var(--color-text)]"
+          value={status}
+          onChange={(event) => onStatusChange(event.target.value)}
+        >
+          <option value="all">Barcha statuslar</option>
+          {orderStatuses.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Ofitsiant
+        <select
+          className="h-10 rounded-md border border-[var(--color-border)] bg-[var(--color-surface2)] px-3 text-sm font-semibold normal-case text-[var(--color-text)]"
+          value={waiterId}
+          onChange={(event) => onWaiterChange(event.target.value)}
+        >
+          <option value="all">Barcha waiterlar</option>
+          {waiters.map((waiter) => (
+            <option key={waiter.id} value={waiter.id}>
+              {waiter.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+        Vaqt
+        <select
+          className="h-10 rounded-md border border-[var(--color-border)] bg-[var(--color-surface2)] px-3 text-sm font-semibold normal-case text-[var(--color-text)]"
+          value={period}
+          onChange={(event) => onPeriodChange(event.target.value as OrderPeriodFilter)}
+        >
+          <option value="all">Hammasi</option>
+          <option value="day">Kun</option>
+          <option value="week">Hafta</option>
+          <option value="month">Oy</option>
+          <option value="year">Yil</option>
+        </select>
+      </label>
     </div>
   );
 }
@@ -134,6 +232,9 @@ export function CashierDashboard() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [editingOrder, setEditingOrder] = useState<ActiveOrder | null>(null);
+  const [checkStatusFilter, setCheckStatusFilter] = useState("all");
+  const [checkWaiterFilter, setCheckWaiterFilter] = useState("all");
+  const [checkPeriodFilter, setCheckPeriodFilter] = useState<OrderPeriodFilter>("all");
 
   usePusherEvent(restaurant?.id ? `restaurant:${restaurant.id}` : null, "order:created", () => {
     void queryClient.invalidateQueries({ queryKey: ["cashier-all-orders"] });
@@ -235,6 +336,15 @@ export function CashierDashboard() {
     if (!selectedZoneId) return active;
     return active.filter((order) => order.table.zone.id === selectedZoneId || order.table.zone.name === selectedZone?.name);
   }, [orders.data?.items, selectedZone?.name, selectedZoneId]);
+  const filteredOrdersForView = useMemo(
+    () =>
+      activeOrdersForView.filter((order) => {
+        if (checkStatusFilter !== "all" && order.status !== checkStatusFilter) return false;
+        if (checkWaiterFilter !== "all" && order.waiter.id !== checkWaiterFilter) return false;
+        return isOrderInPeriod(order.createdAt, checkPeriodFilter);
+      }),
+    [activeOrdersForView, checkPeriodFilter, checkStatusFilter, checkWaiterFilter]
+  );
 
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -421,7 +531,16 @@ export function CashierDashboard() {
             ))}
             {zones.length === 0 ? <Panel><div className="text-sm text-slate-500">Zona topilmadi</div></Panel> : null}
           </div>
-          <ActiveChecks orders={activeOrdersForView} title="Active cheklar" onOpen={setEditingOrder} />
+          <CheckFilters
+            status={checkStatusFilter}
+            waiterId={checkWaiterFilter}
+            period={checkPeriodFilter}
+            waiters={waiters}
+            onStatusChange={setCheckStatusFilter}
+            onWaiterChange={setCheckWaiterFilter}
+            onPeriodChange={setCheckPeriodFilter}
+          />
+          <ActiveChecks orders={filteredOrdersForView} title="Active cheklar" onOpen={setEditingOrder} />
         </>
       ) : (
         <>
@@ -448,7 +567,16 @@ export function CashierDashboard() {
             })}
             {visibleTables.length === 0 ? <Panel><div className="text-sm text-slate-500">Bu zonada stol yo'q</div></Panel> : null}
           </div>
-          <ActiveChecks orders={activeOrdersForView} title="Active cheklar" onOpen={setEditingOrder} />
+          <CheckFilters
+            status={checkStatusFilter}
+            waiterId={checkWaiterFilter}
+            period={checkPeriodFilter}
+            waiters={waiters}
+            onStatusChange={setCheckStatusFilter}
+            onWaiterChange={setCheckWaiterFilter}
+            onPeriodChange={setCheckPeriodFilter}
+          />
+          <ActiveChecks orders={filteredOrdersForView} title="Active cheklar" onOpen={setEditingOrder} />
         </>
       )}
 
