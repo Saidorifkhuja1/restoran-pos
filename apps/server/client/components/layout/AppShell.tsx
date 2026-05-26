@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Globe, Moon, Sun } from "lucide-react";
 import { apiClient } from "@/client/api/client";
 import { useRealtimeInvalidation } from "@/client/hooks/useRealtimeInvalidation";
@@ -17,7 +17,6 @@ const languageOptions: { value: Language; label: string }[] = [
 ];
 
 export function AppShell({ children }: { children?: React.ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
   const { user, logout, hydrated } = useAuthStore();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -48,11 +47,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   function closePanel() {
     setProfilePanel(null);
   }
-  function handleBack() {
-    if (window.history.length > 1) router.back();
-    else router.push("/tables");
-  }
-  const showBackButton = pathname !== "/tables";
   useEffect(() => {
     if (themeMode === "auto") {
       const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -77,15 +71,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       <div>
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-slate-300 bg-white/95 px-5 shadow-sm backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            {showBackButton ? (
-              <button
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-400 bg-white text-xl leading-none text-slate-800 shadow-sm hover:bg-slate-100"
-                aria-label={t.back}
-                onClick={handleBack}
-              >
-                ←
-              </button>
-            ) : null}
             <div>
               <div className="text-sm font-semibold">{user?.name}</div>
               <div className="text-xs text-slate-500">{user?.role}</div>
