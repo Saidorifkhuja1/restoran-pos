@@ -32,6 +32,9 @@ export function AuthBootstrap({
     if (bootstrapped.current) {
       return undefined;
     }
+    if (!hydrated) {
+      return undefined;
+    }
     bootstrapped.current = true;
     setHydrated(false);
     if (!token) {
@@ -69,7 +72,7 @@ export function AuthBootstrap({
     return () => {
       mounted = false;
     };
-  }, [allowedRoles, loginPath, logout, setAuth, setHydrated, token]);
+  }, [allowedRoles, hydrated, loginPath, logout, setAuth, setHydrated, token]);
 
   const isAllowed = Boolean(
     hydrated && user && (!allowedRoles || allowedRoles.includes(user.role))

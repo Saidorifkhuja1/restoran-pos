@@ -59,6 +59,9 @@ export const useAuthStore = create<AuthState>()(
         restaurant: state.restaurant,
         token: state.token,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated(true);
+      },
     }
   )
 );
