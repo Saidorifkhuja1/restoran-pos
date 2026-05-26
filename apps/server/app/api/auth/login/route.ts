@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const { login, password } = parseResult.data as LoginRequest;
     let restaurantId = parseResult.data.restaurantId;
-    const pin = parseResult.data.pin ?? password;
+    const pin = (parseResult.data.pin ?? password)?.trim();
     if (!pin) {
       return badRequest("Parol majburiy");
     }
