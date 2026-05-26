@@ -18,6 +18,7 @@ type Table = {
   zone: { id: string; name: string; color?: string | null };
 };
 type Staff = { id: string; name: string; role: string };
+type Zone = { id: string; name: string; color?: string | null; _count?: { tables: number } };
 type MenuCategory = {
   id: string;
   name: string;
@@ -148,6 +149,11 @@ export function CashierDashboard() {
     enabled: Boolean(restaurant?.id),
     queryFn: () => getData<Paginated<Table>>(`/restaurants/${restaurant?.id}/tables?limit=100`),
   });
+  const zoneQuery = useQuery({
+    queryKey: ["cashier-zones", restaurant?.id],
+    enabled: Boolean(restaurant?.id),
+    queryFn: () => getData<Zone[]>("/admin/zones"),
+  });
   const orders = useQuery({
     queryKey: ["cashier-all-orders"],
     queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&scope=restaurant&limit=100"),
@@ -170,17 +176,25 @@ export function CashierDashboard() {
 
   const waiters = useMemo(() => (staff.data?.items ?? []).filter((s) => s.role === "WAITER"), [staff.data]);
   const zones = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; color?: string | null; total: number; busy: number }>();
+    const tableStats = new Map<string, { total: number; busy: number }>();
     (tables.data?.items ?? []).forEach((table) => {
-      const current = seen.get(table.zone.id) ?? { id: table.zone.id, name: table.zone.name, color: table.zone.color, total: 0, busy: 0 };
-      seen.set(table.zone.id, {
-        ...current,
+      const current = tableStats.get(table.zone.id) ?? { total: 0, busy: 0 };
+      tableStats.set(table.zone.id, {
         total: current.total + 1,
         busy: current.busy + (table.status === "FREE" ? 0 : 1),
       });
     });
-    return Array.from(seen.values());
-  }, [tables.data?.items]);
+    return (zoneQuery.data ?? []).map((zone) => {
+      const stats = tableStats.get(zone.id);
+      return {
+        id: zone.id,
+        name: zone.name,
+        color: zone.color,
+        total: stats?.total ?? zone._count?.tables ?? 0,
+        busy: stats?.busy ?? 0,
+      };
+    });
+  }, [tables.data?.items, zoneQuery.data]);
   const selectedZone = zones.find((zone) => zone.id === selectedZoneId);
   const visibleTables = useMemo(() => {
     if (!selectedZoneId) return [];

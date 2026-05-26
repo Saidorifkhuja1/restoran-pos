@@ -12,7 +12,7 @@ type RouteParams = {
 };
 
 const updateZoneSchema = z.object({
-  name: z.string().min(2).optional(),
+  name: z.string().trim().min(2).optional(),
   color: z.string().regex(/^#[0-9A-F]{6}$/i, "Noto'g'ri rang").optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().optional(),
@@ -121,8 +121,9 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       const existing = await prisma.zone.findFirst({
         where: {
           restaurantId: token.restaurantId,
-          name: data.name,
+          name: { equals: data.name, mode: "insensitive" },
           id: { not: params.id },
+          isActive: true,
         },
       });
 

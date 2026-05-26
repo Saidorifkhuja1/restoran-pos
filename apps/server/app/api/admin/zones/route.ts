@@ -6,7 +6,7 @@ import { UserToken } from "@restopos/types";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createZoneSchema = z.object({
-  name: z.string().min(2, "Zon nomi kamida 2 ta harf bo'lishi kerak"),
+  name: z.string().trim().min(2, "Zon nomi kamida 2 ta harf bo'lishi kerak"),
   color: z.string().regex(/^#[0-9A-F]{6}$/i, "Noto'g'ri rang"),
 });
 
@@ -26,18 +26,18 @@ export async function GET(request: NextRequest) {
 
     const token = auth.token as UserToken;
 
-    if (!["ADMIN", "MANAGER"].includes(token.role)) {
+    if (!["ADMIN", "MANAGER", "WAITER", "CASHIER"].includes(token.role)) {
       return forbidden("Ruxsat kerak");
     }
 
     const zones = await prisma.zone.findMany({
-      where: { restaurantId: token.restaurantId },
+      where: { restaurantId: token.restaurantId, isActive: true },
       include: {
         _count: {
           select: { tables: true },
         },
       },
-      orderBy: { sortOrder: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
 
     return success(zones);
@@ -80,11 +80,16 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.zone.findFirst({
       where: {
         restaurantId: token.restaurantId,
-        name: data.name,
+        name: { equals: data.name, mode: "insensitive" },
+      },
+      include: {
+        _count: {
+          select: { tables: true },
+        },
       },
     });
 
-    if (existing) {
+    if (existing?.isActive) {
       return badRequest("Bu nom bilan zon allaqachon mavjud");
     }
 
@@ -96,6 +101,30 @@ export async function POST(request: NextRequest) {
     });
 
     const sortOrder = (lastZone?.sortOrder || 0) + 1;
+
+    if (existing) {
+      const zone = await prisma.zone.update({
+        where: { id: existing.id },
+        data: {
+          name: data.name,
+          color: data.color,
+          sortOrder,
+          isActive: true,
+        },
+        include: {
+          _count: {
+            select: { tables: true },
+          },
+        },
+      });
+
+      await publishEvent(restaurantChannel(token.restaurantId), "zone:updated", {
+        action: "created",
+        zone,
+      });
+
+      return success(zone, 201);
+    }
 
     const zone = await prisma.zone.create({
       data: {
