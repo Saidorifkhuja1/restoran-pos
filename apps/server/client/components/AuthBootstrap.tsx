@@ -2,17 +2,30 @@
 
 import { useEffect, useRef } from "react";
 import { apiClient, ApiEnvelope } from "@/client/api/client";
-import { AuthRestaurant, AuthUser, useAuthStore } from "@/client/store/authStore";
+import { AuthRestaurant, AuthRole, AuthUser, useAuthStore } from "@/client/store/authStore";
 
 type MeResponse = {
   user: AuthUser;
   restaurant: AuthRestaurant | null;
 };
 
-export function AuthBootstrap({ children }: { children: React.ReactNode }) {
+type AuthBootstrapProps = {
+  allowedRoles?: AuthRole[];
+  children: React.ReactNode;
+  loginPath?: string;
+};
+
+export function AuthBootstrap({
+  allowedRoles,
+  children,
+  loginPath = "/login",
+}: AuthBootstrapProps) {
   const setAuth = useAuthStore((state) => state.setAuth);
   const setHydrated = useAuthStore((state) => state.setHydrated);
   const logout = useAuthStore((state) => state.logout);
+  const token = useAuthStore((state) => state.token);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const user = useAuthStore((state) => state.user);
   const bootstrapped = useRef(false);
 
   useEffect(() => {
@@ -21,26 +34,54 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
     }
     bootstrapped.current = true;
     setHydrated(false);
+    if (!token) {
+      logout();
+      setHydrated(true);
+      window.location.replace(loginPath);
+      return undefined;
+    }
+
     let mounted = true;
     apiClient
       .get<ApiEnvelope<MeResponse>>("/auth/me")
       .then((response) => {
         if (!mounted) return;
+        if (allowedRoles && !allowedRoles.includes(response.data.data.user.role)) {
+          logout();
+          setHydrated(true);
+          window.location.replace(loginPath);
+          return;
+        }
+
         setAuth({
           user: response.data.data.user,
           restaurant: response.data.data.restaurant,
+          token,
         });
       })
       .catch(() => {
         if (mounted) {
           logout();
           setHydrated(true);
+          window.location.replace(loginPath);
         }
       });
     return () => {
       mounted = false;
     };
-  }, [logout, setAuth, setHydrated]);
+  }, [allowedRoles, loginPath, logout, setAuth, setHydrated, token]);
+
+  const isAllowed = Boolean(
+    hydrated && user && (!allowedRoles || allowedRoles.includes(user.role))
+  );
+
+  if (!isAllowed) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#050916] text-white">
+        <div className="text-sm font-bold text-slate-300">Yuklanmoqda...</div>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthBootstrap } from "@/client/components/AuthBootstrap";
+import { AuthRole } from "@/client/store/authStore";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -16,7 +17,17 @@ function makeQueryClient() {
   });
 }
 
-export function ClientProviders({ children }: { children: React.ReactNode }) {
+type ClientProvidersProps = {
+  allowedRoles?: AuthRole[];
+  children: React.ReactNode;
+  loginPath?: string;
+};
+
+export function ClientProviders({
+  allowedRoles,
+  children,
+  loginPath,
+}: ClientProvidersProps) {
   const [queryClient] = useState(makeQueryClient);
 
   useEffect(() => {
@@ -50,7 +61,9 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthBootstrap>{children}</AuthBootstrap>
+      <AuthBootstrap allowedRoles={allowedRoles} loginPath={loginPath}>
+        {children}
+      </AuthBootstrap>
     </QueryClientProvider>
   );
 }
