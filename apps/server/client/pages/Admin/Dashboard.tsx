@@ -312,6 +312,12 @@ function isUnauthorized(error: unknown) {
   return error instanceof AxiosError && error.response?.status === 401;
 }
 
+function adminErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof AxiosError) return error.response?.data?.error || fallback;
+  if (error instanceof Error) return error.message || fallback;
+  return fallback;
+}
+
 function isStrongPassword(value: string) {
   return value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
 }
@@ -358,64 +364,81 @@ export function AdminDashboard() {
   const [editingZone, setEditingZone] = useState<Zone | null>(null);
   const [zoneName, setZoneName] = useState("");
   const [zoneColor, setZoneColor] = useState("#3B82F6");
+  const [pageError, setPageError] = useState("");
 
   const deleteStaffMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/admin/staff/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
-    onError: (error) => { if (isUnauthorized(error)) router.replace("/login"); },
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => {
+      if (isUnauthorized(error)) router.replace("/login");
+      setPageError(adminErrorMessage(error, "Xodim o'chirishda xato"));
+    },
   });
   const deleteCategoryMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/restaurants/${restaurantId}/menu/categories/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => setPageError(adminErrorMessage(error, "Kategoriya o'chirishda xato")),
   });
   const updateCategoryMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => apiClient.put(`/restaurants/${restaurantId}/menu/categories/${id}`, { name }),
     onSuccess: async () => {
       setEditingCategoryId(null);
       setCategoryName("");
+      setFormError("");
       setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Kategoriya yangilashda xato")),
   });
   const deleteSupplierMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/admin/suppliers/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => setPageError(adminErrorMessage(error, "Ta'minotchi o'chirishda xato")),
   });
   const updateSupplierMut = useMutation({
     mutationFn: (data: { id: string; name: string; phone?: string; contactPerson?: string; category?: string; balance: number }) =>
       apiClient.put(`/admin/suppliers/${data.id}`, { name: data.name, phone: data.phone || null, contactPerson: data.contactPerson || null, category: data.category || null, balance: data.balance }),
     onSuccess: async () => {
       setEditingSupplier(null);
+      setPageError("");
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setPageError(adminErrorMessage(error, "Ta'minotchi yangilashda xato")),
   });
   const updateStaffMut = useMutation({
     mutationFn: (data: { id: string; name: string; phone?: string; role: string; newPin?: string }) =>
       apiClient.put(`/admin/staff/${data.id}`, data),
     onSuccess: async () => {
       setEditingStaff(null);
+      setPageError("");
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setPageError(adminErrorMessage(error, "Xodim yangilashda xato")),
   });
   const updateFoodMut = useMutation({
     mutationFn: (data: { id: string; name: string; price: number; categoryId: string; isAvailable: boolean; image?: string }) =>
       apiClient.put(`/restaurants/${restaurantId}/menu/items/${data.id}`, { name: data.name, price: data.price, categoryId: data.categoryId, isAvailable: data.isAvailable, ...(data.image ? { image: data.image } : {}) }),
     onSuccess: async () => {
       setEditingFood(null);
+      setPageError("");
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setPageError(adminErrorMessage(error, "Taom yangilashda xato")),
   });
   const deleteFoodMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/restaurants/${restaurantId}/menu/items/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => setPageError(adminErrorMessage(error, "Taom o'chirishda xato")),
   });
   const deleteExpenseMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/admin/expenses/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => setPageError(adminErrorMessage(error, "Chiqim o'chirishda xato")),
   });
   const deletePlaceMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/restaurants/${restaurantId}/tables/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
+    onError: (error) => setPageError(adminErrorMessage(error, "Joy o'chirishda xato")),
   });
   const updateZoneMut = useMutation({
     mutationFn: () => apiClient.put(`/admin/zones/${editingZone?.id}`, { name: zoneName, color: zoneColor }),
@@ -427,16 +450,14 @@ export function AdminDashboard() {
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
     onError: (error) => {
-      const msg = error instanceof AxiosError ? error.response?.data?.error : undefined;
-      setFormError(msg || "Zona yangilashda xato");
+      setFormError(adminErrorMessage(error, "Zona yangilashda xato"));
     },
   });
   const deleteZoneMut = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/admin/zones/${id}`),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
+    onSuccess: async () => { setPageError(""); await queryClient.invalidateQueries({ queryKey: ["admin-overview"] }); },
     onError: (error) => {
-      const msg = error instanceof AxiosError ? error.response?.data?.error : undefined;
-      setFormError(msg || "Zona o'chirishda xato");
+      setPageError(adminErrorMessage(error, "Zona o'chirishda xato"));
     },
   });
 
@@ -473,16 +494,16 @@ export function AdminDashboard() {
     },
     onError: (error) => {
       if (isUnauthorized(error)) router.replace("/admin/login");
-      const msg = error instanceof AxiosError ? error.response?.data?.error : undefined;
-      setFormError(msg || "Xodim yaratishda xato");
+      setFormError(adminErrorMessage(error, "Xodim yaratishda xato"));
     },
   });
   const createCategory = useMutation({
     mutationFn: () => apiClient.post(`/restaurants/${restaurantId}/menu/categories`, { name: categoryName, sortOrder: (data?.categories.length ?? 0) + 1, isActive: true }),
     onSuccess: async () => {
-      setCategoryName(""); setModal(null);
+      setCategoryName(""); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Kategoriya yaratishda xato")),
   });
   const createFood = useMutation({
     mutationFn: async () => {
@@ -510,37 +531,40 @@ export function AdminDashboard() {
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
     onError: (error) => {
-      const msg = error instanceof AxiosError ? error.response?.data?.error : undefined;
-      setFormError(msg || "Taom yaratishda xato yuz berdi");
+      setFormError(adminErrorMessage(error, "Taom yaratishda xato yuz berdi"));
     },
   });
   const createSupplier = useMutation({
     mutationFn: () => apiClient.post("/admin/suppliers", { name: supplierName, phone: supplierPhone || undefined, contactPerson: supplierContact || undefined, category: supplierCategory || undefined, balance: 0 }),
     onSuccess: async () => {
-      setSupplierName(""); setSupplierPhone(""); setSupplierContact(""); setSupplierCategory(""); setModal(null);
+      setSupplierName(""); setSupplierPhone(""); setSupplierContact(""); setSupplierCategory(""); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Ta'minotchi yaratishda xato")),
   });
   const createExpense = useMutation({
     mutationFn: () => apiClient.post("/admin/expenses", { name: expenseName, amount: Number(expenseAmount), supplierId: expenseSupplierId || undefined }),
     onSuccess: async () => {
-      setExpenseName(""); setExpenseAmount(""); setExpenseSupplierId(""); setModal(null);
+      setExpenseName(""); setExpenseAmount(""); setExpenseSupplierId(""); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Chiqim yaratishda xato")),
   });
   const createPlace = useMutation({
     mutationFn: () => apiClient.post(`/restaurants/${restaurantId}/tables`, { zoneId: placeZoneId, number: Number(placeNumber), capacity: Number(placeCapacity), shape: "RECTANGLE", posX: 0, posY: 0 }),
     onSuccess: async () => {
-      setPlaceZoneId(""); setPlaceNumber(""); setPlaceCapacity("4"); setModal(null);
+      setPlaceZoneId(""); setPlaceNumber(""); setPlaceCapacity("4"); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Joy yaratishda xato")),
   });
   const createZone = useMutation({
     mutationFn: () => apiClient.post("/admin/zones", { name: zoneName, color: zoneColor }),
     onSuccess: async () => {
-      setZoneName(""); setZoneColor("#3B82F6"); setModal(null);
+      setZoneName(""); setZoneColor("#3B82F6"); setFormError(""); setModal(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
+    onError: (error) => setFormError(adminErrorMessage(error, "Zona yaratishda xato")),
   });
 
   function openZoneCreate() {
@@ -730,6 +754,14 @@ export function AdminDashboard() {
 
           <div className="p-6">
             {overview.isLoading ? <div className="rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-sm font-semibold text-[var(--color-muted)]">{t.loading}</div> : null}
+            {pageError ? (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-[14px] border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-300">
+                <span>{pageError}</span>
+                <button className="text-xs font-black text-rose-200 hover:text-white" type="button" onClick={() => setPageError("")}>
+                  Yopish
+                </button>
+              </div>
+            ) : null}
 
             {activeSection === "dashboard" ? (
               <div className="space-y-5">
