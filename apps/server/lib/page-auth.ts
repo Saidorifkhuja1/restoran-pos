@@ -20,7 +20,8 @@ export async function requirePageRole(roles: PageRole[]): Promise<JWTPayload> {
   }
 
   if (!roles.includes(session.role as PageRole)) {
-    redirect(defaultPathForPageRole(session.role as PageRole));
+    const loginPath = roles.includes("SUPERADMIN") ? "/superadmin/login" : "/login";
+    redirect(`/switch-account?next=${encodeURIComponent(loginPath)}`);
   }
 
   return session;
