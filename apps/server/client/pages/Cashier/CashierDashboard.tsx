@@ -31,7 +31,9 @@ type MenuItem = {
   name: string;
   price: number;
   emoji?: string | null;
-  category: { id: string; name: string };
+  isActive: boolean;
+  isAvailable: boolean;
+  category: { id: string; name: string; isActive?: boolean };
 };
 type ActiveOrder = {
   id: string;
@@ -175,6 +177,13 @@ export function CashierDashboard() {
   });
 
   const waiters = useMemo(() => (staff.data?.items ?? []).filter((s) => s.role === "WAITER"), [staff.data]);
+  const availableMenuItems = useMemo(
+    () =>
+      (menu.data?.items ?? []).filter(
+        (item) => item.isActive && item.isAvailable && item.category.isActive !== false
+      ),
+    [menu.data?.items]
+  );
   const zones = useMemo(() => {
     const tableStats = new Map<string, { total: number; busy: number }>();
     (tables.data?.items ?? []).forEach((table) => {
@@ -207,7 +216,7 @@ export function CashierDashboard() {
   }, [orders.data?.items]);
   const categories = useMemo(() => {
     const itemCounts = new Map<string, number>();
-    (menu.data?.items ?? []).forEach((item) => {
+    availableMenuItems.forEach((item) => {
       itemCounts.set(item.category.id, (itemCounts.get(item.category.id) ?? 0) + 1);
     });
     return (menuCategories.data?.items ?? [])
@@ -216,11 +225,11 @@ export function CashierDashboard() {
         id: category.id,
         name: category.name,
         emoji: category.emoji,
-        count: itemCounts.get(category.id) ?? category._count?.items ?? 0,
+        count: itemCounts.get(category.id) ?? 0,
       }));
-  }, [menu.data?.items, menuCategories.data?.items]);
+  }, [availableMenuItems, menuCategories.data?.items]);
   const selectedCategory = categories.find((category) => category.id === categoryId);
-  const categoryItems = categoryId ? (menu.data?.items ?? []).filter((item) => item.category.id === categoryId) : [];
+  const categoryItems = categoryId ? availableMenuItems.filter((item) => item.category.id === categoryId) : [];
   const activeOrdersForView = useMemo(() => {
     const active = orders.data?.items ?? [];
     if (!selectedZoneId) return active;
@@ -444,7 +453,7 @@ export function CashierDashboard() {
       )}
 
       {editingOrder ? (
-        <OrderEditModal order={editingOrder} menu={menu.data?.items ?? []} onClose={() => setEditingOrder(null)} queryClient={queryClient} />
+        <OrderEditModal order={editingOrder} menu={availableMenuItems} onClose={() => setEditingOrder(null)} queryClient={queryClient} />
       ) : null}
     </>
   );
