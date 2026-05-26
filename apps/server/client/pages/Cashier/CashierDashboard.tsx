@@ -72,6 +72,10 @@ function orderStatusTone(status: string): "green" | "yellow" | "red" {
   return "yellow";
 }
 
+function isOpenOrderStatus(status: string) {
+  return status !== "PAID" && status !== "CANCELLED";
+}
+
 function isOrderInPeriod(createdAt: string, period: OrderPeriodFilter) {
   if (period === "all") return true;
   const date = new Date(createdAt);
@@ -259,7 +263,7 @@ export function CashierDashboard() {
   });
   const orders = useQuery({
     queryKey: ["cashier-all-orders"],
-    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&scope=restaurant&limit=100"),
+    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?scope=restaurant&limit=100"),
     refetchInterval: 10_000,
   });
   const staff = useQuery({
@@ -312,7 +316,9 @@ export function CashierDashboard() {
   }, [selectedZoneId, tables.data?.items]);
   const orderByTableId = useMemo(() => {
     const map = new Map<string, ActiveOrder>();
-    (orders.data?.items ?? []).forEach((order) => map.set(order.table.id, order));
+    (orders.data?.items ?? [])
+      .filter((order) => isOpenOrderStatus(order.status))
+      .forEach((order) => map.set(order.table.id, order));
     return map;
   }, [orders.data?.items]);
   const categories = useMemo(() => {
