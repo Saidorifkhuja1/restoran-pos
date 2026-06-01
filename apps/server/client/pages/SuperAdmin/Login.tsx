@@ -13,8 +13,8 @@ type LoginResponse = {
 };
 
 const superAdminLoginSchema = z.object({
-  email: z.string().email("Email noto'g'ri"),
-  password: z.string().min(6, "Parol kamida 6 belgi"),
+  email: z.string().trim().toLowerCase().email("Email noto'g'ri"),
+  password: z.string().trim().min(6, "Parol kamida 6 belgi"),
 });
 
 type SuperAdminLoginForm = z.infer<typeof superAdminLoginSchema>;
@@ -37,8 +37,15 @@ export function SuperAdminLogin() {
       };
       setAuth({ user, token: response.data.data.token });
       window.location.href = "/superadmin/dashboard";
-    } catch {
-      form.setError("root", { message: "Email yoki parol noto'g'ri" });
+    } catch (error: unknown) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { error?: string } } }).response?.data?.error === "string"
+          ? (error as { response: { data: { error: string } } }).response.data.error
+          : "Email yoki parol noto'g'ri";
+      form.setError("root", { message });
     }
   }
 

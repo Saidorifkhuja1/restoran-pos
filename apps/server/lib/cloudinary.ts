@@ -10,6 +10,13 @@ export type CloudinaryUploadResult = {
   format: string;
 };
 
+const extensionByType: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
 export async function uploadToCloudinary(file: File, folder: string): Promise<CloudinaryUploadResult> {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
@@ -41,7 +48,7 @@ async function uploadLocally(file: File, folder: string): Promise<CloudinaryUplo
   const uploadDir = path.join(process.cwd(), "public", "uploads", folder);
   await mkdir(uploadDir, { recursive: true });
 
-  const ext = file.name.split(".").pop() || "jpg";
+  const ext = extensionByType[file.type] ?? "jpg";
   const id = crypto.randomUUID();
   const fileName = `${id}.${ext}`;
   const filePath = path.join(uploadDir, fileName);

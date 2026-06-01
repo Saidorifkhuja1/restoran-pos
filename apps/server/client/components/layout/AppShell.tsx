@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Globe, Moon, Sun } from "lucide-react";
 import { apiClient } from "@/client/api/client";
@@ -19,6 +19,7 @@ const languageOptions: { value: Language; label: string }[] = [
 export function AppShell({ children }: { children?: React.ReactNode }) {
   const router = useRouter();
   const { user, logout, hydrated } = useAuthStore();
+  const headerActionsRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState<"language" | null>(null);
   const [profilePanel, setProfilePanel] = useState<ProfilePanel>(null);
@@ -32,6 +33,16 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       router.replace("/superadmin/dashboard");
     }
   }, [router, user?.role]);
+  useEffect(() => {
+    function closeMenusOnOutsideClick(event: MouseEvent) {
+      if (headerActionsRef.current?.contains(event.target as Node)) return;
+      setProfileOpen(false);
+      setSettingsOpen(null);
+    }
+
+    document.addEventListener("mousedown", closeMenusOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeMenusOnOutsideClick);
+  }, []);
   async function handleLogout() {
     await apiClient.post("/auth/logout").catch(() => undefined);
     logout();
@@ -76,7 +87,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
               <div className="text-xs text-slate-500">{user?.role}</div>
             </div>
           </div>
-          <div className="relative flex items-center gap-2">
+          <div className="relative flex items-center gap-2" ref={headerActionsRef}>
             <button
               className={iconButtonClass}
               aria-label="Theme"
@@ -151,7 +162,12 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
         </main>
       </div>
       {profilePanel ? (
-        <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/40 p-4">
+        <div
+          className="fixed inset-0 z-30 grid place-items-center bg-slate-950/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closePanel();
+          }}
+        >
           <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-text)] shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-lg font-semibold">{t.profile}</div>

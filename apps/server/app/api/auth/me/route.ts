@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const token = auth.token as UserToken;
     const user = await prisma.user.findFirst({
-      where: { id: token.userId, restaurantId: token.restaurantId, isActive: true },
+      where: { id: token.userId, restaurantId: token.restaurantId, isActive: true, restaurant: { isActive: true } },
       select: {
         id: true,
         name: true,

@@ -88,6 +88,19 @@ export async function POST(request: NextRequest, context: RouteParams) {
     }
 
     const payment = await prisma.$transaction(async (tx) => {
+      const payableOrder = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          restaurantId: token.restaurantId,
+          status: { notIn: ["PAID", "CANCELLED"] },
+          payment: null,
+        },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+      if (payableOrder.count === 0) {
+        throw new Error("ORDER_ALREADY_PAID");
+      }
+
       const counter = await tx.restaurantCounter.upsert({
         where: { restaurantId: token.restaurantId },
         update: { receiptSeq: { increment: 1 } },
@@ -135,12 +148,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
         },
       });
 
-      await tx.order.update({
-        where: { id: order.id },
-        data: { status: "PAID", paidAt: new Date() },
-      });
-      await tx.table.update({
-        where: { id: order.tableId },
+      await tx.table.updateMany({
+        where: { id: order.tableId, restaurantId: token.restaurantId, currentOrderId: order.id },
         data: { status: "FREE", currentOrderId: null },
       });
       await tx.shift.updateMany({
@@ -180,6 +189,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     return success(payment, 201);
   } catch (error) {
+    if (error instanceof Error && error.message === "ORDER_ALREADY_PAID") {
+      return badRequest("Bu buyurtma uchun to'lov qabul qilingan");
+    }
     console.error("[Create Payment Error]", error);
     return serverError("To'lovni yakunlashda xato");
   }

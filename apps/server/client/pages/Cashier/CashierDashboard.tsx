@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ArrowLeft, Minus, Package, Plus, Truck } from "lucide-react";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { Badge, Modal, PageTitle, Panel } from "@/client/components/ui";
 import { usePusherEvent } from "@/client/hooks/usePusher";
@@ -40,6 +41,7 @@ type ActiveOrder = {
   orderNumber: number;
   status: string;
   guestCount: number;
+  note?: string | null;
   createdAt: string;
   table: { id: string; number: number; status: string; zone: { id?: string; name: string } };
   waiter: { id: string; name: string };
@@ -113,15 +115,15 @@ function ActiveChecks({ orders, title, onOpen }: { orders: ActiveOrder[]; title:
         {orders.map((order) => (
           <button
             key={order.id}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:border-[var(--color-accent)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
             onClick={() => onOpen(order)}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="font-semibold text-[var(--color-text)]">#{order.orderNumber} · Stol {order.table.number}</div>
+              <div className="font-semibold text-[var(--color-text)]">#{order.orderNumber}{order.note?.includes("Kurier") || order.note?.includes("Olib ketish") ? ` · ${order.note}` : ` · Stol ${order.table.number}`}</div>
               <Badge tone={orderStatusTone(order.status)}>{order.status}</Badge>
             </div>
             <div className="mt-1 text-sm text-[var(--color-muted)]">{order.table.zone.name} · {order.waiter.name}</div>
-            <div className="mt-2 text-sm font-semibold text-[var(--color-text)]">{activeOrderTotal(order).toLocaleString("uz-UZ")} UZS</div>
+            <div className="mt-2 text-base font-semibold text-[var(--color-text)]">{activeOrderTotal(order).toLocaleString("uz-UZ")} UZS</div>
           </button>
         ))}
       </div>
@@ -211,8 +213,8 @@ function WaiterPicker({ waiters, selectedWaiterId, onSelect }: { waiters: Staff[
                 key={waiter.id}
                 className={`rounded-md border p-3 text-left text-sm font-semibold shadow-sm transition active:scale-[0.99] ${
                   selected
-                    ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-contrast)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)]"
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface2)]"
                 }`}
                 onClick={() => onSelect(waiter.id)}
               >
@@ -230,6 +232,7 @@ export function CashierDashboard() {
   const queryClient = useQueryClient();
   const restaurant = useAuthStore((s) => s.restaurant);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [quickOrderType, setQuickOrderType] = useState<"delivery" | "takeaway" | null>(null);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [selectedTableId, setSelectedTableId] = useState("");
   const [selectedWaiterId, setSelectedWaiterId] = useState("");
@@ -263,8 +266,8 @@ export function CashierDashboard() {
   });
   const orders = useQuery({
     queryKey: ["cashier-all-orders"],
-    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?scope=restaurant&limit=100"),
-    refetchInterval: 10_000,
+    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?scope=restaurant&active=true&limit=100"),
+    refetchInterval: 30_000,
   });
   const staff = useQuery({
     queryKey: ["cashier-staff"],
@@ -417,10 +420,10 @@ export function CashierDashboard() {
     return (
       <>
         <div className="mb-4">
-          <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700" aria-label="Orqaga" onClick={closeCreateOrder}>
-            ←
+          <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]" aria-label="Orqaga" onClick={closeCreateOrder}>
+            <ArrowLeft size={18} />
           </button>
-          <PageTitle title="Buyurtma" subtitle={`Stol ${selectedTable.number} · ${selectedTable.zone.name}`} />
+          <PageTitle title="Buyurtma" subtitle={selectedTable.id.startsWith("__") ? (quickOrderType === "delivery" ? "Kurier buyurtma" : "Olib ketish") : `Stol ${selectedTable.number} · ${selectedTable.zone.name}`} />
         </div>
         <div className="grid items-start gap-3 md:grid-cols-[1fr_320px]">
           <div>
@@ -430,7 +433,7 @@ export function CashierDashboard() {
                   {categories.map((category) => (
                     <button
                       key={category.id}
-                      className="min-h-[150px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:shadow-md active:scale-[0.99]"
+                      className="min-h-[136px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:border-[var(--color-accent)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
                       onClick={() => setCategoryId(category.id)}
                     >
                       <div className="mb-4 text-4xl">{category.emoji || "🍽"}</div>
@@ -445,11 +448,11 @@ export function CashierDashboard() {
               <>
                 <div className="mb-3 flex items-center gap-3">
                   <button
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-lg text-[var(--color-text)] shadow-sm"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
                     aria-label="Orqaga"
                     onClick={() => setCategoryId(null)}
                   >
-                    ←
+                    <ArrowLeft size={18} />
                   </button>
                   <div>
                     <div className="text-lg font-bold text-[var(--color-text)]">{selectedCategory?.name}</div>
@@ -462,7 +465,7 @@ export function CashierDashboard() {
                       <div className="mb-3 text-3xl">{item.emoji || "🍽"}</div>
                       <div className="font-semibold">{item.name}</div>
                       <div className="text-sm text-[var(--color-muted)]">{item.price.toLocaleString("uz-UZ")} UZS</div>
-                      <button className="mt-4 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium shadow-sm hover:bg-[var(--color-surface2)]" onClick={() => addToCart(item)}>Qo'shish</button>
+                      <button className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-95" onClick={() => addToCart(item)}><Plus size={16} />Qo'shish</button>
                     </Panel>
                   ))}
                 </div>
@@ -473,34 +476,44 @@ export function CashierDashboard() {
           <Panel className="md:sticky md:top-20">
             <div className="mb-3 text-sm font-semibold">Savatcha</div>
             <div className="mb-3 grid gap-2">
-              <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm">Stol {selectedTable.number} · {selectedTable.zone.name}</div>
-              <div className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm">
+              <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">{selectedTable.id.startsWith("__") ? (quickOrderType === "delivery" ? "Kurier" : "Olib ketish") : `Stol ${selectedTable.number} · ${selectedTable.zone.name}`}</div>
+              <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">
                 Ofitsiant: {waiters.find((waiter) => waiter.id === selectedWaiterId)?.name || "tanlanmagan"}
               </div>
             </div>
             <div className="space-y-2">
               {cart.map((item) => (
-                <div className="rounded-md border border-[var(--color-primary)] bg-[var(--color-surface2)] p-3" key={item.menuItemId}>
+                <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-3" key={item.menuItemId}>
                   <div className="flex justify-between gap-2">
                     <div className="font-medium">{item.name}</div>
                     <div className="text-sm">{(item.price * item.quantity).toLocaleString("uz-UZ")}</div>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <button className="h-8 w-8 rounded-md border border-slate-400 bg-white" onClick={() => changeQuantity(item.menuItemId, -1)}>-</button>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]" onClick={() => changeQuantity(item.menuItemId, -1)}><Minus size={14} /></button>
                     <span className="w-8 text-center text-sm">{item.quantity}</span>
-                    <button className="h-8 w-8 rounded-md border border-slate-400 bg-white" onClick={() => changeQuantity(item.menuItemId, 1)}>+</button>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]" onClick={() => changeQuantity(item.menuItemId, 1)}><Plus size={14} /></button>
                     <span className="ml-auto text-xs text-[var(--color-muted)]">Yangi</span>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="my-4 flex justify-between border-t border-slate-300 pt-3 font-semibold"><span>Jami</span><span>{cartTotal.toLocaleString("uz-UZ")} UZS</span></div>
+            <div className="my-4 flex justify-between border-t border-[var(--color-border)] pt-3 font-semibold"><span>Jami</span><span>{cartTotal.toLocaleString("uz-UZ")} UZS</span></div>
             <button
-              disabled={!selectedTableId || !selectedWaiterId || cart.length === 0 || createOrder.isPending}
-              className="w-full rounded-md bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-[var(--color-primary-contrast)] disabled:opacity-50"
-              onClick={() => createOrder.mutate()}
+              disabled={(!selectedTable.id.startsWith("__") && !selectedTableId) || !selectedWaiterId || cart.length === 0 || createOrder.isPending}
+              className="w-full rounded-md bg-[var(--color-accent)] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => {
+                if (selectedTable.id.startsWith("__")) {
+                  // Quick order (delivery/takeaway)
+                  const items = cart.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity }));
+                  apiClient.post("/orders/quick", { type: quickOrderType, waiterId: selectedWaiterId, items })
+                    .then(() => { closeCreateOrder(); queryClient.invalidateQueries({ queryKey: ["cashier-all-orders"] }); queryClient.invalidateQueries({ queryKey: ["cashier-tables"] }); })
+                    .catch(() => {});
+                } else {
+                  createOrder.mutate();
+                }
+              }}
             >
-              {createOrder.isPending ? "Yuborilmoqda..." : !selectedWaiterId ? "Ofitsiant tanlang" : "Oshxonaga yuborish"}
+              {createOrder.isPending ? "Yuborilmoqda..." : !selectedWaiterId ? "Ofitsiant tanlang" : selectedTable.id.startsWith("__") ? "Chek yaratish (to'langan)" : "Oshxonaga yuborish"}
             </button>
             {!selectedWaiterId ? <div className="mt-2 text-sm text-amber-600">Chek waiter profilida ko'rinishi uchun ofitsiant tanlang.</div> : null}
             {createOrder.error ? <div className="mt-2 text-sm text-rose-600">Xato: {createOrder.error.message}</div> : null}
@@ -512,22 +525,30 @@ export function CashierDashboard() {
 
   return (
     <>
-      <div className="mb-4">
-        {selectedZoneId ? (
-          <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700" aria-label="Orqaga" onClick={() => setSelectedZoneId(null)}>
-            ←
-          </button>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          {selectedZoneId ? (
+            <button className="mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]" aria-label="Orqaga" onClick={() => setSelectedZoneId(null)}>
+              <ArrowLeft size={18} />
+            </button>
+          ) : null}
+          <PageTitle title={selectedZone?.name || "Kassa"} subtitle={selectedZone ? "Stol holatini tanlang" : "Zonalar va aktiv stollar"} />
+        </div>
+        {!selectedZoneId ? (
+          <div className="flex gap-2">
+            <button className="inline-flex items-center gap-2 rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white" onClick={() => { setSelectedTable({ id: "__delivery__", number: 0, capacity: 1, status: "FREE", zone: { id: "", name: "Kurier" } }); setQuickOrderType("delivery"); }}><Truck size={16} />Kurier</button>
+            <button className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] hover:bg-[var(--color-surface2)]" onClick={() => { setSelectedTable({ id: "__takeaway__", number: 0, capacity: 1, status: "FREE", zone: { id: "", name: "Olib ketish" } }); setQuickOrderType("takeaway"); }}><Package size={16} />Olib ketish</button>
+          </div>
         ) : null}
-        <PageTitle title={selectedZone?.name || "Kassa"} subtitle={selectedZone ? "Stol holatini tanlang" : "Zonalar va aktiv stollar"} />
       </div>
 
       {!selectedZoneId ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {zones.map((zone) => (
+            {zones.filter((z) => z.name !== "Kurier" && z.name !== "Olib ketish").map((zone) => (
               <button
                 key={zone.id}
-                className="min-h-[150px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition hover:border-[var(--color-primary)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
+                className="min-h-[132px] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition hover:border-[var(--color-accent)] hover:bg-[var(--color-surface2)] active:scale-[0.99]"
                 onClick={() => setSelectedZoneId(zone.id)}
               >
                 <div className="mb-4 h-3 w-12 rounded-full" style={{ backgroundColor: zone.color || "#0f766e" }} />
@@ -557,7 +578,7 @@ export function CashierDashboard() {
               return (
                 <button
                   key={table.id}
-                  className={`rounded-md border bg-[var(--color-surface)] p-4 text-left shadow-sm transition active:scale-[0.99] ${isBusy ? "border-rose-400 bg-rose-950/10 ring-1 ring-rose-400/50" : "border-[var(--color-border)] hover:border-[var(--color-primary)]"}`}
+                  className={`rounded-md border bg-[var(--color-surface)] p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition active:scale-[0.99] ${isBusy ? "border-rose-300 bg-rose-50 ring-1 ring-rose-200 dark:border-rose-400/45 dark:bg-rose-950/10 dark:ring-rose-400/40" : "border-[var(--color-border)] hover:border-[var(--color-accent)]"}`}
                   onClick={() => openTable(table)}
                 >
                   <div className="mb-4 flex items-center justify-between gap-2">
@@ -683,7 +704,7 @@ function OrderEditModal({ order, menu, onClose, queryClient }: { order: ActiveOr
   return (
     <Modal title={`Chek #${order.orderNumber} tahrirlash`} onClose={onClose}>
       <div className="space-y-3">
-        <div className="text-sm text-slate-500">Stol {order.table.number} · {order.table.zone.name} · {order.waiter.name}</div>
+        <div className="text-sm text-slate-500">{order.note?.includes("Kurier") || order.note?.includes("Olib ketish") ? order.note : `Stol ${order.table.number} · ${order.table.zone.name}`} · {order.waiter.name}</div>
         <div className="rounded-md border p-2">
           {order.items.map((item) => (
             <div key={item.id} className="flex items-center justify-between py-1 text-sm">

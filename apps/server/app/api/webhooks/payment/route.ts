@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
       return forbidden("Webhook imzosi noto'g'ri");
     }
 
-    const parsed = webhookSchema.safeParse(JSON.parse(rawBody));
+    const body = JSON.parse(rawBody) as unknown;
+    const parsed = webhookSchema.safeParse(body);
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
     if (parsed.data.status !== "PAID") return success({ accepted: true });
 
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
       },
     });
     if (!order) return notFound("Buyurtma topilmadi");
+    if (order.status === "CANCELLED") return badRequest("Bekor qilingan buyurtmani to'lab bo'lmaydi");
     const provider = (request.headers.get("x-payment-provider") || "generic").toLowerCase();
     const existingProviderPayment = await prisma.payment.findFirst({
       where: {
@@ -97,6 +99,23 @@ export async function POST(request: NextRequest) {
     if (parsed.data.amount !== totalAmount) return badRequest("To'lov summasi mos emas");
 
     const payment = await prisma.$transaction(async (tx) => {
+      const payableOrder = await tx.order.updateMany({
+        where: { id: order.id, restaurantId: order.restaurantId, status: { notIn: ["PAID", "CANCELLED"] }, payment: null },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+      if (payableOrder.count === 0) throw new Error("ORDER_ALREADY_PAID");
+
+      const cashier =
+        (await tx.user.findFirst({
+          where: { restaurantId: order.restaurantId, role: "CASHIER", isActive: true },
+          select: { id: true },
+        })) ??
+        (await tx.user.findFirst({
+          where: { restaurantId: order.restaurantId, role: "ADMIN", isActive: true },
+          select: { id: true },
+        }));
+      if (!cashier) throw new Error("Restoranda faol kassir yoki admin topilmadi");
+
       const counter = await tx.restaurantCounter.upsert({
         where: { restaurantId: order.restaurantId },
         update: { receiptSeq: { increment: 1 } },
@@ -107,20 +126,7 @@ export async function POST(request: NextRequest) {
         data: {
           restaurantId: order.restaurantId,
           orderId: order.id,
-          cashierId: (await (async () => {
-            const cashier = await tx.user.findFirst({
-              where: { restaurantId: order.restaurantId, role: "CASHIER", isActive: true },
-              select: { id: true },
-            });
-            if (cashier) return cashier.id;
-            // Fallback to admin if no active cashier
-            const admin = await tx.user.findFirst({
-              where: { restaurantId: order.restaurantId, role: "ADMIN", isActive: true },
-              select: { id: true },
-            });
-            if (admin) return admin.id;
-            throw new Error("Restoranda faol kassir yoki admin topilmadi");
-          })()),
+          cashierId: cashier.id,
           method: parsed.data.method,
           provider,
           providerPaymentId: parsed.data.providerPaymentId,
@@ -134,8 +140,10 @@ export async function POST(request: NextRequest) {
         select: { id: true, orderId: true, totalAmount: true, method: true, receiptNumber: true },
       });
 
-      await tx.order.update({ where: { id: order.id }, data: { status: "PAID", paidAt: new Date() } });
-      await tx.table.update({ where: { id: order.tableId }, data: { status: "FREE", currentOrderId: null } });
+      await tx.table.updateMany({
+        where: { id: order.tableId, restaurantId: order.restaurantId, currentOrderId: order.id },
+        data: { status: "FREE", currentOrderId: null },
+      });
       return created;
     });
 
@@ -148,6 +156,10 @@ export async function POST(request: NextRequest) {
 
     return success({ accepted: true, payment });
   } catch (error) {
+    if (error instanceof SyntaxError) return badRequest("Webhook JSON noto'g'ri");
+    if (error instanceof Error && error.message === "ORDER_ALREADY_PAID") {
+      return success({ accepted: true, duplicate: true });
+    }
     console.error("[Payment Webhook Error]", error);
     return serverError("Webhookni qayta ishlashda xato");
   }

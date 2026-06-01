@@ -5,14 +5,14 @@ import * as Dialog from "@radix-ui/react-dialog";
 export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-4">
-      <h1 className="text-2xl font-semibold tracking-normal text-slate-950">{title}</h1>
-      {subtitle ? <p className="mt-1 text-sm text-slate-600">{subtitle}</p> : null}
+      <h1 className="text-2xl font-semibold tracking-normal text-[var(--color-text)]">{title}</h1>
+      {subtitle ? <p className="mt-1 text-sm font-medium text-[var(--color-muted)]">{subtitle}</p> : null}
     </div>
   );
 }
 
 export function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-md border border-slate-300 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.08)] ${className || ""}`}>{children}</section>;
+  return <section className={`rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ${className || ""}`}>{children}</section>;
 }
 
 export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "yellow" | "red" | "blue" }) {

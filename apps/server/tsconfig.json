@@ -21,9 +21,6 @@
       "@restopos/types": [
         "../../packages/types/src"
       ],
-      "@restopos/ui": [
-        "../../packages/ui/src"
-      ],
       "@restopos/utils": [
         "../../packages/utils/src"
       ]

@@ -15,8 +15,7 @@ const updateSchema = z.object({
   shape: z.enum(["SQUARE", "ROUND", "RECTANGLE"]).optional(),
   posX: z.number().optional(),
   posY: z.number().optional(),
-  status: z.enum(["FREE", "OCCUPIED", "RESERVED", "BILL_REQUESTED"]).optional(),
-});
+}).strict();
 
 const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
 const writeRoles = [UserRole.ADMIN, UserRole.MANAGER] as const;
@@ -106,10 +105,17 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
 
     const table = await prisma.table.findFirst({
       where: { id: params.tableId, restaurantId: token.restaurantId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        _count: { select: { orders: true, reservations: true } },
+      },
     });
     if (!table) return notFound("Stol topilmadi");
     if (table.status !== "FREE") return forbidden("Band stolni o'chirib bo'lmaydi");
+    if (table._count.orders > 0 || table._count.reservations > 0) {
+      return forbidden("Tarixiy buyurtma yoki bronlari bor stolni o'chirib bo'lmaydi");
+    }
 
     await prisma.table.delete({ where: { id: params.tableId } });
     await publishEvent(restaurantChannel(token.restaurantId), "table:status", {

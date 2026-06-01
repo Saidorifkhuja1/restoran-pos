@@ -70,7 +70,7 @@ export async function buildReportSummary(restaurantId: string, from: Date, to: D
       by: ["name", "price"],
       where: {
         status: { not: "CANCELLED" },
-        order: { restaurantId, createdAt: { gte: from, lte: to } },
+        order: { restaurantId, payment: { paidAt: { gte: from, lte: to } } },
       },
       _sum: { quantity: true, price: true },
       orderBy: { _sum: { quantity: "desc" } },

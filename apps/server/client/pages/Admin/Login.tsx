@@ -58,10 +58,10 @@ export function AdminLogin() {
         </p>
 
         <label className="mb-3 block text-sm">
-          <span className="mb-1 block font-bold text-slate-300">Login</span>
+          <span className="mb-1 block font-bold text-slate-300">Ism</span>
           <input
             className="w-full rounded-[14px] border border-[#2a4167] bg-[#0b1220] px-3 py-3 font-semibold text-white outline-none focus:border-[#13EC37]"
-            placeholder="Ism, telefon yoki login"
+            placeholder="Xodim ismi"
             autoComplete="username"
             {...form.register("login")}
           />
@@ -77,7 +77,7 @@ export function AdminLogin() {
           <input
             className="w-full rounded-[14px] border border-[#2a4167] bg-[#0b1220] px-3 py-3 font-semibold text-white outline-none focus:border-[#13EC37]"
             type="password"
-            placeholder="PIN yoki parol"
+            placeholder="Parol"
             autoComplete="current-password"
             {...form.register("password")}
           />

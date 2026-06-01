@@ -85,6 +85,18 @@ export async function POST(request: NextRequest) {
     }
 
     const reservation = await prisma.$transaction(async (tx) => {
+      const lockedTable = await tx.table.updateMany({
+        where: {
+          id: parsed.data.tableId,
+          restaurantId: token.restaurantId,
+          status: { notIn: ["OCCUPIED", "BILL_REQUESTED"] },
+        },
+        data: { status: "RESERVED" },
+      });
+      if (lockedTable.count === 0) {
+        throw new Error("TABLE_NOT_AVAILABLE");
+      }
+
       const created = await tx.reservation.create({
         data: {
           restaurantId: token.restaurantId,
@@ -109,11 +121,6 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await tx.table.update({
-        where: { id: parsed.data.tableId },
-        data: { status: "RESERVED" },
-      });
-
       return created;
     });
 
@@ -127,6 +134,9 @@ export async function POST(request: NextRequest) {
 
     return success(reservation, 201);
   } catch (error) {
+    if (error instanceof Error && error.message === "TABLE_NOT_AVAILABLE") {
+      return forbidden("Bu stol band");
+    }
     console.error("[Create Reservation Error]", error);
     return serverError("Bron yaratishda xato");
   }

@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
 
     const parsed = reportJobSchema.safeParse(await request.json());
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
+    const from = new Date(parsed.data.from);
+    const to = new Date(parsed.data.to);
+    if (from > to) return badRequest("Sana oralig'i noto'g'ri");
 
     const exportId = crypto.randomUUID();
     const stored = await saveReportJob({

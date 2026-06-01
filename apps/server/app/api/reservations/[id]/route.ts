@@ -64,32 +64,40 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     });
     if (!existing) return notFound("Bron topilmadi");
 
-    const reservation = await prisma.reservation.update({
-      where: { id: params.id },
-      data: {
-        ...parsed.data,
-        scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : undefined,
-      },
-      select: {
-        id: true,
-        guestName: true,
-        guestPhone: true,
-        guestCount: true,
-        scheduledAt: true,
-        note: true,
-        status: true,
-        tableId: true,
-      },
+    const shouldReleaseTable = parsed.data.status === "CANCELLED" || parsed.data.status === "NO_SHOW";
+    const reservation = await prisma.$transaction(async (tx) => {
+      const updated = await tx.reservation.update({
+        where: { id: params.id },
+        data: {
+          ...parsed.data,
+          scheduledAt: parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : undefined,
+        },
+        select: {
+          id: true,
+          guestName: true,
+          guestPhone: true,
+          guestCount: true,
+          scheduledAt: true,
+          note: true,
+          status: true,
+          tableId: true,
+        },
+      });
+
+      if (shouldReleaseTable) {
+        await tx.table.updateMany({
+          where: { id: existing.tableId, restaurantId: token.restaurantId, status: "RESERVED" },
+          data: { status: "FREE" },
+        });
+      }
+
+      return updated;
     });
 
     const events = [
       publishEvent(restaurantChannel(token.restaurantId), "reservation:updated", reservation),
     ];
-    if (parsed.data.status === "CANCELLED" || parsed.data.status === "NO_SHOW") {
-      await prisma.table.update({
-        where: { id: existing.tableId },
-        data: { status: "FREE" },
-      });
+    if (shouldReleaseTable) {
       events.push(
         publishEvent(restaurantChannel(token.restaurantId), "table:status", {
           tableId: existing.tableId,
@@ -119,16 +127,21 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (!reservation) return notFound("Bron topilmadi");
     if (reservation.status === "ARRIVED") return forbidden("Kelgan bronni o'chirib bo'lmaydi");
 
-    const updated = await prisma.reservation.update({
-      where: { id: params.id },
-      data: { status: "CANCELLED" },
-      select: { id: true, status: true },
+    const updated = await prisma.$transaction(async (tx) => {
+      const cancelled = await tx.reservation.update({
+        where: { id: params.id },
+        data: { status: "CANCELLED" },
+        select: { id: true, status: true },
+      });
+
+      await tx.table.updateMany({
+        where: { id: reservation.tableId, restaurantId: token.restaurantId, status: "RESERVED" },
+        data: { status: "FREE" },
+      });
+
+      return cancelled;
     });
 
-    await prisma.table.update({
-      where: { id: reservation.tableId },
-      data: { status: "FREE" },
-    });
     await Promise.all([
       publishEvent(restaurantChannel(token.restaurantId), "reservation:deleted", updated),
       publishEvent(restaurantChannel(token.restaurantId), "table:status", {

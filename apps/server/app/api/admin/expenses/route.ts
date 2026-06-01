@@ -58,6 +58,14 @@ export async function POST(request: NextRequest) {
     const parsed = expenseSchema.safeParse(await request.json());
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
 
+    if (parsed.data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: parsed.data.supplierId, restaurantId: token.restaurantId, isActive: true },
+        select: { id: true },
+      });
+      if (!supplier) return badRequest("Yetkazib beruvchi topilmadi");
+    }
+
     const expense = await prisma.expense.create({
       data: {
         restaurantId: token.restaurantId,

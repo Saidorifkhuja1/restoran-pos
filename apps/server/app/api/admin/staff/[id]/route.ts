@@ -18,7 +18,7 @@ const updateStaffSchema = z.object({
   name: z.string().min(2).optional(),
   phone: z.string().optional(),
   role: z.enum(["MANAGER", "WAITER", "KITCHEN", "CASHIER"]).optional(),
-  newPin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/).optional(),
+  newPassword: z.string().min(4, "Parol kamida 4 ta belgi bo'lishi kerak").optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -130,8 +130,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     if (data.role) updateData.role = data.role;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
-    // If new PIN provided, hash it
-    if (data.newPin) {
+    if (data.newPassword) {
       const users = await prisma.user.findMany({
         where: {
           restaurantId: token.restaurantId,
@@ -144,16 +143,14 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         await Promise.all(
           users.map(async (candidate) => ({
             candidate,
-            matches: await bcrypt.compare(data.newPin as string, candidate.pin),
+            matches: await bcrypt.compare(data.newPassword as string, candidate.pin),
           }))
         )
       ).find(({ matches }) => matches)?.candidate;
 
-      if (pinExists) {
-        return badRequest("Bu PIN allaqachon ishlatilgan");
-      }
+      if (pinExists) return badRequest("Bu parol allaqachon ishlatilgan");
 
-      updateData.pin = await bcrypt.hash(data.newPin, 10);
+      updateData.pin = await bcrypt.hash(data.newPassword, 10);
     }
 
     const updated = await prisma.user.update({

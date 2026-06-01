@@ -24,6 +24,30 @@ export async function POST(request: NextRequest, context: RouteParams) {
     if (reservation.status === "CANCELLED" || reservation.status === "NO_SHOW") return forbidden("Bu bron faol emas");
 
     const order = await prisma.$transaction(async (tx) => {
+      const markedArrived = await tx.reservation.updateMany({
+        where: {
+          id: reservation.id,
+          restaurantId: token.restaurantId,
+          status: { notIn: ["ARRIVED", "CANCELLED", "NO_SHOW"] },
+        },
+        data: { status: "ARRIVED", arrivedAt: new Date() },
+      });
+      if (markedArrived.count === 0) {
+        throw new Error("RESERVATION_NOT_ACTIVE");
+      }
+
+      const lockedTable = await tx.table.updateMany({
+        where: {
+          id: reservation.tableId,
+          restaurantId: token.restaurantId,
+          status: { in: ["FREE", "RESERVED"] },
+        },
+        data: { status: "OCCUPIED" },
+      });
+      if (lockedTable.count === 0) {
+        throw new Error("TABLE_NOT_AVAILABLE");
+      }
+
       const counter = await tx.restaurantCounter.upsert({
         where: { restaurantId: token.restaurantId },
         update: { orderSeq: { increment: 1 } },
@@ -44,13 +68,9 @@ export async function POST(request: NextRequest, context: RouteParams) {
         select: { id: true, orderNumber: true, status: true, tableId: true },
       });
 
-      await tx.reservation.update({
-        where: { id: reservation.id },
-        data: { status: "ARRIVED", arrivedAt: new Date() },
-      });
       await tx.table.update({
         where: { id: reservation.tableId },
-        data: { status: "OCCUPIED", currentOrderId: created.id },
+        data: { currentOrderId: created.id },
       });
 
       return created;
@@ -72,6 +92,12 @@ export async function POST(request: NextRequest, context: RouteParams) {
 
     return success(order, 201);
   } catch (error) {
+    if (error instanceof Error && error.message === "RESERVATION_NOT_ACTIVE") {
+      return forbidden("Bu bron faol emas");
+    }
+    if (error instanceof Error && error.message === "TABLE_NOT_AVAILABLE") {
+      return forbidden("Bu stol band");
+    }
     console.error("[Arrive Reservation Error]", error);
     return serverError("Bronni keldi qilishda xato");
   }

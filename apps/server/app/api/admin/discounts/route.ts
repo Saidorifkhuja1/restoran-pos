@@ -1,17 +1,22 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success } from "@/lib/responses";
-import { UserToken, DiscountType } from "@restopos/types";
+import { unauthorized, badRequest, serverError, success } from "@/lib/responses";
+import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
+import { UserRole } from "@restopos/types";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createDiscountSchema = z.object({
   name: z.string().min(2, "Chegirma nomi kamida 2 ta harf bo'lishi kerak"),
   type: z.enum(["PERCENT", "FIXED"], { errorMap: () => ({ message: "Noto'g'ri chegirma turi" }) }),
   value: z.number().min(1, "Qiymat 1 dan katta bo'lishi kerak"),
+}).refine((data) => data.type !== "PERCENT" || data.value <= 100, {
+  message: "Foiz 1 dan 100 gacha bo'lishi kerak",
+  path: ["value"],
 });
 
-type CreateDiscountRequest = z.infer<typeof createDiscountSchema>;
+const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER] as const;
+const writeRoles = [UserRole.ADMIN] as const;
 
 /**
  * GET /api/admin/discounts
@@ -19,22 +24,9 @@ type CreateDiscountRequest = z.infer<typeof createDiscountSchema>;
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthContext(request);
-
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (!["ADMIN", "MANAGER", "CASHIER"].includes(token.role)) {
-      return forbidden("Ruxsat kerak");
-    }
-
-    const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
-    const limit = Math.min(100, parseInt(searchParams.get("limit") || "10"));
-    const skip = (page - 1) * limit;
+    const token = await getRestaurantToken(request, readRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
+    const { page, limit, skip } = getPagination(request);
 
     const [discounts, total] = await Promise.all([
       prisma.discount.findMany({
@@ -73,33 +65,12 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthContext(request);
+    const token = await getRestaurantToken(request, writeRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (token.role !== "ADMIN") {
-      return forbidden("Admin ruxsat kerak");
-    }
-
-    const body = await request.json();
-    const parseResult = createDiscountSchema.safeParse(body);
-
-    if (!parseResult.success) {
-      return badRequest(
-        parseResult.error.errors[0]?.message || "Validation error"
-      );
-    }
-
-    const data = parseResult.data as CreateDiscountRequest;
-
-    // Validate value
-    if (data.type === "PERCENT" && (data.value < 1 || data.value > 100)) {
-      return badRequest("Foiz 1 dan 100 gacha bo'lishi kerak");
-    }
+    const parsed = createDiscountSchema.safeParse(await request.json());
+    if (!parsed.success) return badRequest(zodMessage(parsed.error));
+    const data = parsed.data;
 
     // Check if discount with same name exists
     const existing = await prisma.discount.findFirst({
@@ -117,7 +88,7 @@ export async function POST(request: NextRequest) {
       data: {
         restaurantId: token.restaurantId,
         name: data.name,
-        type: data.type as DiscountType,
+        type: data.type,
         value: data.value,
       },
       include: {

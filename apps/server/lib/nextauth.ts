@@ -13,8 +13,8 @@ const superAdminCredentialsSchema = z.object({
 
 const staffCredentialsSchema = z.object({
   flow: z.literal("STAFF"),
-  restaurantId: z.string().min(1),
-  pin: z.string().length(4),
+  login: z.string().min(2),
+  password: z.string().min(4),
 });
 
 const nextAuth = NextAuth({
@@ -26,8 +26,7 @@ const nextAuth = NextAuth({
         flow: {},
         email: {},
         password: {},
-        restaurantId: {},
-        pin: {},
+        login: {},
       },
       async authorize(credentials) {
         const superAdminParsed = superAdminCredentialsSchema.safeParse(credentials);
@@ -50,19 +49,15 @@ const nextAuth = NextAuth({
         const staffParsed = staffCredentialsSchema.safeParse(credentials);
         if (!staffParsed.success) return null;
 
-        // Hash the incoming PIN and use DB unique index lookup
-        // Since PIN is stored as bcrypt hash, we need to compare against candidates.
-        // Optimize: use findFirst with unique constraint on (restaurantId, pin) — but pin
-        // is hashed. So we still need to iterate, but limit to active users only and
-        // short-circuit on first match.
         const users = await prisma.user.findMany({
-          where: { restaurantId: staffParsed.data.restaurantId, isActive: true },
+          where: { name: { equals: staffParsed.data.login, mode: "insensitive" }, isActive: true },
           select: { id: true, name: true, role: true, pin: true, restaurantId: true },
+          take: 25,
+          orderBy: { updatedAt: "desc" },
         });
 
-        // Sequential comparison with early exit (more efficient than parallel for small sets)
         for (const candidate of users) {
-          const matches = await bcrypt.compare(staffParsed.data.pin, candidate.pin);
+          const matches = await bcrypt.compare(staffParsed.data.password, candidate.pin);
           if (matches) {
             return {
               id: candidate.id,

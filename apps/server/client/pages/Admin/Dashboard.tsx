@@ -406,7 +406,7 @@ export function AdminDashboard() {
     onError: (error) => setPageError(adminErrorMessage(error, "Ta'minotchi yangilashda xato")),
   });
   const updateStaffMut = useMutation({
-    mutationFn: (data: { id: string; name: string; phone?: string; role: string; newPin?: string }) =>
+    mutationFn: (data: { id: string; name: string; phone?: string; role: string; newPassword?: string }) =>
       apiClient.put(`/admin/staff/${data.id}`, data),
     onSuccess: async () => {
       setEditingStaff(null);
@@ -480,11 +480,10 @@ export function AdminDashboard() {
 
   const createStaff = useMutation({
     mutationFn: () => {
-      const credentialKey = staffRole === UserRole.ADMIN ? "password" : "pin";
       return apiClient.post("/admin/staff", {
         name: staffName.trim(),
         phone: staffPhone.trim() || undefined,
-        [credentialKey]: staffPassword.trim(),
+        password: staffPassword.trim(),
         role: staffRole,
       });
     },
@@ -618,11 +617,7 @@ export function AdminDashboard() {
 
     if (modal === "staff") {
       if (!staffName.trim() || !staffPassword.trim()) {
-        setFormError(staffRole === UserRole.ADMIN ? "Ism va parol majburiy" : "Ism va PIN majburiy");
-        return;
-      }
-      if (staffRole !== UserRole.ADMIN && !/^\d{4,}$/.test(staffPassword.trim())) {
-        setFormError("PIN kamida 4 ta raqam bo'lishi kerak");
+        setFormError("Ism va parol majburiy");
         return;
       }
       createStaff.mutate();
@@ -690,13 +685,13 @@ export function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
-      <div className="grid min-h-screen lg:grid-cols-[265px_1fr]">
-        <aside className="border-r border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-          <div className="mb-5 rounded-[16px] bg-[var(--color-surface2)] p-4">
-            <div className="text-xl font-black">{data?.restaurant?.name || "RestoPOS"}</div>
-            <div className="text-sm font-medium text-[var(--color-muted)]">{t.panel}</div>
+      <div className="grid min-h-screen lg:grid-cols-[248px_1fr]">
+        <aside className="border-r border-[var(--color-border)] bg-[var(--color-surface)] p-4 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
+          <div className="mb-4 rounded-md border border-[var(--color-border)] bg-[var(--color-surface2)] p-3">
+            <div className="truncate text-lg font-semibold">{data?.restaurant?.name || "RestoPOS"}</div>
+            <div className="text-xs font-medium text-[var(--color-muted)]">{t.panel}</div>
           </div>
-          <nav className="space-y-2">
+          <nav className="space-y-1">
             {sections.map((section) => {
               const Icon = section.icon;
               if (section.id === "places") {
@@ -704,10 +699,10 @@ export function AdminDashboard() {
                   <div key={section.id}>
                     <SidebarButton active={activeSection === "places"} icon={<Icon size={19} />} label={section.label} onClick={() => setActiveSection("places")} />
                     {activeSection === "places" ? (
-                      <div className="ml-12 mt-2 space-y-1">
-                        <button className="block w-full rounded-[10px] bg-[#13EC37]/15 px-3 py-2 text-left text-xs font-black text-[#13EC37]" type="button" onClick={() => setModal("place")}>+ Yangi joy</button>
+                      <div className="ml-10 mt-2 space-y-1">
+                        <button className="block w-full rounded-md bg-[var(--color-accent-soft)] px-3 py-2 text-left text-xs font-semibold text-[var(--color-accent)]" type="button" onClick={() => setModal("place")}>+ Yangi joy</button>
                         {(data?.tables ?? []).map((table) => (
-                          <div key={table.id} className="flex items-center justify-between rounded-[10px] bg-[var(--color-surface2)] px-3 py-2">
+                          <div key={table.id} className="flex items-center justify-between rounded-md bg-[var(--color-surface2)] px-3 py-2">
                             <span className="text-xs font-bold text-[var(--color-text)]">{table.zone.name} · #{table.number} · {table.capacity} kishi</span>
                             <button className="text-rose-400 hover:text-rose-300" type="button" onClick={() => setConfirmAction(() => () => deletePlaceMut.mutate(table.id))}><Trash2 size={13} /></button>
                           </div>
@@ -721,41 +716,41 @@ export function AdminDashboard() {
               return <SidebarButton key={section.id} active={activeSection === section.id} icon={<Icon size={19} />} label={section.label} onClick={() => setActiveSection(section.id)} />;
             })}
           </nav>
-          <button className="mt-8 flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left text-sm font-bold text-rose-400 hover:bg-[var(--color-surface2)]" onClick={handleLogout} type="button">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-rose-400/25"><LogOut size={18} /></span>
+          <button className="mt-6 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-400/10" onClick={handleLogout} type="button">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/25"><LogOut size={17} /></span>
             {t.logout}
           </button>
         </aside>
 
         <section className="min-w-0">
-          <header className="flex h-[72px] items-center justify-between border-b border-[var(--color-border)] px-6">
+          <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]/95 px-4 py-3 backdrop-blur sm:px-6">
             <div>
-              <h1 className="text-xl font-black tracking-normal">{t.overview}</h1>
-              <div className="text-sm font-medium text-[var(--color-muted)]">{t.overviewHint}</div>
+              <h1 className="text-xl font-semibold tracking-normal">{sections.find((section) => section.id === activeSection)?.label || t.overview}</h1>
+              <div className="text-sm font-medium text-[var(--color-muted)]">{activeSection === "dashboard" ? t.overviewHint : t.overview}</div>
             </div>
             <div className="relative flex items-center gap-2">
-              <button className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface2)] px-4 text-sm font-bold text-[var(--color-text)]" onClick={() => setLanguageOpen((open) => !open)} type="button">
+              <button className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-text)]" onClick={() => setLanguageOpen((open) => !open)} type="button">
                 <Globe size={16} /> {language.toUpperCase()}
               </button>
               {languageOpen ? (
-                <div className="absolute right-12 top-11 z-50 w-32 overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+                <div className="absolute right-12 top-11 z-50 w-32 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
                   {languageOptions.map((option) => (
-                    <button className={language === option.value ? "block w-full bg-[#13EC37] px-4 py-3 text-left text-sm font-black text-[#121417]" : "block w-full px-4 py-3 text-left text-sm font-bold text-[var(--color-text)] hover:bg-[var(--color-surface2)]"} key={option.value} onClick={() => { updateSettings({ language: option.value }); setLanguageOpen(false); }} type="button">
+                    <button className={language === option.value ? "block w-full bg-[var(--color-accent)] px-4 py-3 text-left text-sm font-semibold text-white" : "block w-full px-4 py-3 text-left text-sm font-semibold text-[var(--color-text)] hover:bg-[var(--color-surface2)]"} key={option.value} onClick={() => { updateSettings({ language: option.value }); setLanguageOpen(false); }} type="button">
                       {option.label}
                     </button>
                   ))}
                 </div>
               ) : null}
-              <button className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface2)] text-[var(--color-text)]" onClick={() => updateSettings({ themeMode: resolvedDark ? "light" : "dark" })} type="button">
+              <button className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)]" onClick={() => updateSettings({ themeMode: resolvedDark ? "light" : "dark" })} type="button">
                 {resolvedDark ? <Sun size={17} /> : <Moon size={17} />}
               </button>
             </div>
           </header>
 
-          <div className="p-6">
-            {overview.isLoading ? <div className="rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-sm font-semibold text-[var(--color-muted)]">{t.loading}</div> : null}
+          <div className="p-4 sm:p-6">
+            {overview.isLoading ? <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-sm font-semibold text-[var(--color-muted)]">{t.loading}</div> : null}
             {pageError ? (
-              <div className="mb-4 flex items-center justify-between gap-3 rounded-[14px] border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm font-semibold text-rose-300">
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-300">
                 <span>{pageError}</span>
                 <button className="text-xs font-black text-rose-200 hover:text-white" type="button" onClick={() => setPageError("")}>
                   Yopish
@@ -870,19 +865,16 @@ export function AdminDashboard() {
                   <Input placeholder={t.name} value={staffName} onChange={setStaffName} />
                   <Input placeholder={t.phone} value={staffPhone} onChange={setStaffPhone} />
                   <Input
-                    placeholder={staffRole === UserRole.ADMIN ? "Kuchli parol" : "PIN"}
+                    placeholder="Parol"
                     type="password"
-                    inputMode={staffRole === UserRole.ADMIN ? undefined : "numeric"}
                     value={staffPassword}
-                    onChange={(value) => setStaffPassword(staffRole === UserRole.ADMIN ? value : value.replace(/\D/g, ""))}
+                    onChange={setStaffPassword}
                   />
                   <SelectField label={t.role} value={staffRole} onChange={(value) => setStaffRole(value as UserRole)}>
                     <option value={UserRole.MANAGER}>MANAGER</option><option value={UserRole.WAITER}>WAITER</option><option value={UserRole.KITCHEN}>KITCHEN</option><option value={UserRole.CASHIER}>CASHIER</option>
                   </SelectField>
                   <div className="rounded-[12px] bg-[var(--color-bg)] px-3 py-2 text-xs font-semibold text-[var(--color-muted)]">
-                    {staffRole === UserRole.ADMIN
-                      ? "Admin paroli kamida 8 belgi, katta/kichik harf, raqam va maxsus belgidan iborat bo'lishi kerak."
-                      : "Ofitsiant, kassir va oshxona uchun PIN faqat raqam bo'ladi, kamida 4 ta raqam kiriting."}
+                    Login faqat xodim ismi va parol orqali ishlaydi. Har bir xodimga kamida 4 belgili parol bering.
                   </div>
                 </>
               ) : null}
@@ -1061,8 +1053,8 @@ export function AdminDashboard() {
 
 function SidebarButton({ icon, label, active, suffix, onClick }: { icon: React.ReactNode; label: string; active?: boolean; suffix?: React.ReactNode; onClick: () => void }) {
   return (
-    <button className={active ? "flex w-full items-center gap-3 rounded-[14px] bg-[var(--color-surface2)] px-3 py-3 text-left text-sm font-black text-[var(--color-text)]" : "flex w-full items-center gap-3 rounded-[14px] px-3 py-3 text-left text-sm font-bold text-[var(--color-muted)] hover:bg-[var(--color-surface2)] hover:text-[var(--color-text)]"} onClick={onClick} type="button">
-      <span className={active ? "flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300" : "flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border)]"}>{icon}</span>
+    <button className={active ? "flex w-full items-center gap-3 rounded-md bg-[var(--color-accent-soft)] px-3 py-2.5 text-left text-sm font-semibold text-[var(--color-text)]" : "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-[var(--color-muted)] hover:bg-[var(--color-surface2)] hover:text-[var(--color-text)]"} onClick={onClick} type="button">
+      <span className={active ? "flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-accent)] text-white" : "flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)]"}>{icon}</span>
       <span className="flex-1">{label}</span>
       {suffix}
     </button>
@@ -1070,35 +1062,35 @@ function SidebarButton({ icon, label, active, suffix, onClick }: { icon: React.R
 }
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return <section className="rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4"><div className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-surface2)] text-emerald-300">{icon}</div><div className="text-2xl font-black">{value}</div><div className="mt-1 text-sm font-semibold text-[var(--color-muted)]">{label}</div></section>;
+  return <section className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"><div className="mb-4 flex h-9 w-9 items-center justify-center rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)]">{icon}</div><div className="text-xl font-semibold">{value}</div><div className="mt-1 text-sm font-medium text-[var(--color-muted)]">{label}</div></section>;
 }
 
 function DataSection({ title, children, action, actionLabel }: { title: string; children: React.ReactNode; action?: () => void; actionLabel?: string }) {
-  return <section className="rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4"><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-black">{title}</h2>{action ? <button className="inline-flex h-10 items-center gap-2 rounded-[14px] bg-[#13EC37] px-4 text-sm font-black text-[#121417]" onClick={action} type="button"><Plus size={17} />{actionLabel}</button> : null}</div>{children}</section>;
+  return <section className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">{title}</h2>{action ? <button className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--color-accent)] px-3 text-sm font-semibold text-white" onClick={action} type="button"><Plus size={16} />{actionLabel}</button> : null}</div>{children}</section>;
 }
 
 function InfoPanel({ title, rows }: { title: string; rows: [string, React.ReactNode][] }) {
-  return <section className="rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4"><h2 className="mb-4 text-xl font-black">{title}</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rows.map(([label, value]) => <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] p-4" key={label}><div className="text-sm font-semibold text-[var(--color-muted)]">{label}</div><div className="mt-1 break-words text-lg font-black">{value}</div></div>)}</div></section>;
+  return <section className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4"><h2 className="mb-4 text-lg font-semibold">{title}</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{rows.map(([label, value]) => <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4" key={label}><div className="text-sm font-medium text-[var(--color-muted)]">{label}</div><div className="mt-1 break-words text-base font-semibold">{value}</div></div>)}</div></section>;
 }
 
 function StaffTable({ items, t, onDelete, onView, onEdit }: { items: Staff[]; t: typeof text.uz; onDelete: (id: string) => void; onView: (staff: Staff) => void; onEdit: (staff: Staff) => void }) {
   if (!items.length) return <Empty t={t} />;
-  return <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)]"><div className="grid grid-cols-[1.3fr_1fr_120px_110px_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-black uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.phone}</div><div>{t.role}</div><div>{t.status}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.3fr_1fr_120px_110px_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-bold">{item.name}</div><div className="font-semibold text-[var(--color-muted)]">{item.phone || "-"}</div><Badge>{item.role}</Badge><Badge tone={item.isActive ? "green" : "red"}>{item.isActive ? t.active : t.inactive}</Badge><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div>;
+  return <div className="overflow-x-auto rounded-md border border-[var(--color-border)]"><div className="min-w-[760px]"><div className="grid grid-cols-[1.3fr_1fr_120px_110px_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-semibold uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.phone}</div><div>{t.role}</div><div>{t.status}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.3fr_1fr_120px_110px_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-semibold">{item.name}</div><div className="font-medium text-[var(--color-muted)]">{item.phone || "-"}</div><Badge>{item.role}</Badge><Badge tone={item.isActive ? "green" : "red"}>{item.isActive ? t.active : t.inactive}</Badge><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div></div>;
 }
 
 function CategoryGrid({ items, t, onDelete, onEdit, onView }: { items: Category[]; t: typeof text.uz; onDelete: (id: string) => void; onEdit: (cat: Category) => void; onView: (cat: Category) => void }) {
   if (!items.length) return <Empty t={t} />;
-  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{items.map((item) => <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] p-4" key={item.id}><div className="flex items-center justify-between"><div className="text-2xl">{item.emoji || "🍽️"}</div><div className="flex items-center gap-1"><button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text)]" type="button" onClick={() => onView(item)}><Eye size={14} /></button><button className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border)] text-emerald-300" type="button" onClick={() => onEdit(item)}><Pencil size={14} /></button><button className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-400/30 text-rose-300" type="button" onClick={() => onDelete(item.id)}><Trash2 size={14} /></button></div></div><div className="mt-3 text-lg font-black">{item.name}</div><div className="text-sm font-semibold text-[var(--color-muted)]">{item._count?.items ?? 0} ta</div></div>)}</div>;
+  return <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{items.map((item) => <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4" key={item.id}><div className="flex items-center justify-between"><div className="text-2xl">{item.emoji || "🍽️"}</div><div className="flex items-center gap-1"><button className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text)]" type="button" onClick={() => onView(item)}><Eye size={14} /></button><button className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-accent)]" type="button" onClick={() => onEdit(item)}><Pencil size={14} /></button><button className="flex h-7 w-7 items-center justify-center rounded-md border border-rose-400/30 text-rose-500 dark:text-rose-300" type="button" onClick={() => onDelete(item.id)}><Trash2 size={14} /></button></div></div><div className="mt-3 text-base font-semibold">{item.name}</div><div className="text-sm font-medium text-[var(--color-muted)]">{item._count?.items ?? 0} ta</div></div>)}</div>;
 }
 
 function SupplierTable({ items, t, onDelete, onView, onEdit }: { items: Supplier[]; t: typeof text.uz; onDelete: (id: string) => void; onView: (item: Supplier) => void; onEdit: (item: Supplier) => void }) {
   if (!items.length) return <Empty t={t} />;
-  return <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)]"><div className="grid grid-cols-[1.2fr_1fr_1fr_1fr_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-black uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.phone}</div><div>{t.contactPerson}</div><div>{t.supplierCategory}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-bold">{item.name}</div><div className="font-semibold text-[var(--color-muted)]">{item.phone || "-"}</div><div className="font-semibold text-[var(--color-muted)]">{item.contactPerson || "-"}</div><div className="font-semibold text-[var(--color-muted)]">{item.category || "-"}</div><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div>;
+  return <div className="overflow-x-auto rounded-md border border-[var(--color-border)]"><div className="min-w-[760px]"><div className="grid grid-cols-[1.2fr_1fr_1fr_1fr_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-semibold uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.phone}</div><div>{t.contactPerson}</div><div>{t.supplierCategory}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-semibold">{item.name}</div><div className="font-medium text-[var(--color-muted)]">{item.phone || "-"}</div><div className="font-medium text-[var(--color-muted)]">{item.contactPerson || "-"}</div><div className="font-medium text-[var(--color-muted)]">{item.category || "-"}</div><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div></div>;
 }
 
 function FoodTable({ items, t, onDelete, onView, onEdit }: { items: MenuItem[]; t: typeof text.uz; onDelete: (id: string) => void; onView: (item: MenuItem) => void; onEdit: (item: MenuItem) => void }) {
   if (!items.length) return <Empty t={t} />;
-  return <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)]"><div className="grid grid-cols-[1.3fr_1fr_1fr_110px_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-black uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.categories}</div><div>{t.price}</div><div>{t.status}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.3fr_1fr_1fr_110px_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-bold">{item.emoji || "🍽️"} {item.name}</div><div className="font-semibold text-[var(--color-muted)]">{item.category.name}</div><div className="font-black">{item.price.toLocaleString("uz-UZ")} UZS</div><Badge tone={item.isAvailable ? "green" : "red"}>{item.isAvailable ? t.available : t.unavailable}</Badge><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div>;
+  return <div className="overflow-x-auto rounded-md border border-[var(--color-border)]"><div className="min-w-[760px]"><div className="grid grid-cols-[1.3fr_1fr_1fr_110px_120px] bg-[var(--color-surface2)] px-4 py-3 text-xs font-semibold uppercase text-[var(--color-muted)]"><div>{t.name}</div><div>{t.categories}</div><div>{t.price}</div><div>{t.status}</div><div>{t.actions}</div></div>{items.map((item) => <div className="grid grid-cols-[1.3fr_1fr_1fr_110px_120px] items-center border-t border-[var(--color-border)] px-4 py-3 text-sm" key={item.id}><div className="font-semibold">{item.emoji || "🍽️"} {item.name}</div><div className="font-medium text-[var(--color-muted)]">{item.category.name}</div><div className="font-semibold">{item.price.toLocaleString("uz-UZ")} UZS</div><Badge tone={item.isAvailable ? "green" : "red"}>{item.isAvailable ? t.available : t.unavailable}</Badge><RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item.id)} /></div>)}</div></div>;
 }
 
 function ReceiptsSection({ orders, t }: { orders: Order[]; t: typeof text.uz }) {
@@ -1214,20 +1206,20 @@ function ExpenseTable({ items, t, onDelete }: { items: Expense[]; t: typeof text
 }
 
 function RowActions({ onView, onEdit, onDelete }: { onView?: () => void; onEdit?: () => void; onDelete: () => void }) {
-  return <div className="flex items-center gap-2">{onView ? <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface2)]" type="button" onClick={onView}><Eye size={16} /></button> : null}{onEdit ? <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] text-emerald-300 hover:bg-[var(--color-surface2)]" type="button" onClick={onEdit}><Pencil size={16} /></button> : null}<button className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-400/30 text-rose-300 hover:bg-rose-400/10" type="button" onClick={onDelete}><Trash2 size={16} /></button></div>;
+  return <div className="flex items-center gap-2">{onView ? <button className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface2)]" type="button" onClick={onView}><Eye size={16} /></button> : null}{onEdit ? <button className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-accent)] hover:bg-[var(--color-surface2)]" type="button" onClick={onEdit}><Pencil size={16} /></button> : null}<button className="flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/30 text-rose-500 hover:bg-rose-400/10 dark:text-rose-300" type="button" onClick={onDelete}><Trash2 size={16} /></button></div>;
 }
 
-function StaffEditModal({ staff, t, onClose, onSave, isPending }: { staff: Staff; t: typeof text.uz; onClose: () => void; onSave: (data: { id: string; name: string; phone?: string; role: string; newPin?: string }) => void; isPending: boolean }) {
+function StaffEditModal({ staff, t, onClose, onSave, isPending }: { staff: Staff; t: typeof text.uz; onClose: () => void; onSave: (data: { id: string; name: string; phone?: string; role: string; newPassword?: string }) => void; isPending: boolean }) {
   const [name, setName] = useState(staff.name);
   const [phone, setPhone] = useState(staff.phone || "");
   const [role, setRole] = useState(staff.role);
-  const [newPin, setNewPin] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) { setError("Ism majburiy"); return; }
-    onSave({ id: staff.id, name, phone: phone || undefined, role, newPin: newPin || undefined });
+    onSave({ id: staff.id, name, phone: phone || undefined, role, newPassword: newPassword || undefined });
   }
 
   return (
@@ -1244,7 +1236,7 @@ function StaffEditModal({ staff, t, onClose, onSave, isPending }: { staff: Staff
           <SelectField label={t.role} value={role} onChange={setRole}>
             <option value="MANAGER">MANAGER</option><option value="WAITER">WAITER</option><option value="KITCHEN">KITCHEN</option><option value="CASHIER">CASHIER</option>
           </SelectField>
-          <Input placeholder="Yangi PIN (ixtiyoriy)" value={newPin} onChange={setNewPin} />
+          <Input placeholder="Yangi parol (ixtiyoriy)" type="password" value={newPassword} onChange={setNewPassword} />
         </div>
         <button className="mt-4 h-11 w-full rounded-[14px] bg-[#13EC37] text-sm font-black text-[#121417] disabled:opacity-60" type="submit" disabled={isPending}>{isPending ? "Saqlanmoqda..." : t.save}</button>
       </form>
@@ -1868,11 +1860,11 @@ function SupplierEditModal({ supplier, t, onClose, onSave, isPending }: { suppli
 }
 
 function Badge({ children, tone = "green" }: { children: React.ReactNode; tone?: "green" | "red" }) {
-  return <span className={tone === "green" ? "w-fit rounded-md bg-emerald-400/15 px-2.5 py-1 text-xs font-black text-emerald-300" : "w-fit rounded-md bg-rose-400/15 px-2.5 py-1 text-xs font-black text-rose-300"}>{children}</span>;
+  return <span className={tone === "green" ? "w-fit rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300" : "w-fit rounded-md bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-400/15 dark:text-rose-300"}>{children}</span>;
 }
 
 function Empty({ t }: { t: typeof text.uz }) {
-  return <div className="rounded-[14px] border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center text-sm font-bold text-[var(--color-muted)]">{t.empty}</div>;
+  return <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-8 text-center text-sm font-semibold text-[var(--color-muted)]">{t.empty}</div>;
 }
 
 function Input({ value, onChange, placeholder, type = "text", inputMode }: { value: string; onChange: (value: string) => void; placeholder: string; type?: string; inputMode?: "numeric" }) {

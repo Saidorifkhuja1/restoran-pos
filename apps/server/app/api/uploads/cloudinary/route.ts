@@ -8,6 +8,7 @@ import { zodMessage } from "@/lib/route-helpers";
 const uploadSchema = z.object({
   folder: z.enum(["logos", "menu-items"]).default("menu-items"),
 });
+const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
     if (!(file instanceof File)) return badRequest("Fayl majburiy");
     if (file.size > 5 * 1024 * 1024) return badRequest("Fayl 5MB dan oshmasin");
-    if (!file.type.startsWith("image/")) return badRequest("Faqat rasm yuklash mumkin");
+    if (!allowedTypes.has(file.type)) return badRequest("Faqat JPG, PNG, WEBP yoki GIF rasm yuklash mumkin");
 
     const result = await uploadToCloudinary(file, `restopos/${parsed.data.folder}`);
     return success({

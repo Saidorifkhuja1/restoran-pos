@@ -217,6 +217,9 @@ model User {
   @@unique([restaurantId, pin])
   @@index([restaurantId])
   @@index([role])
+  @@index([phone])
+  @@index([restaurantId, isActive, updatedAt])
+  @@index([restaurantId, role, isActive])
   @@map("users")
 }
 
@@ -280,6 +283,7 @@ model Table {
   @@index([restaurantId])
   @@index([zoneId])
   @@index([status])
+  @@index([restaurantId, status])
   @@map("tables")
 }
 
@@ -341,6 +345,7 @@ model MenuCategory {
 
   @@unique([restaurantId, name])
   @@index([restaurantId])
+  @@index([restaurantId, isActive, sortOrder])
   @@map("menu_categories")
 }
 
@@ -372,6 +377,8 @@ model MenuItem {
   @@unique([restaurantId, name])
   @@index([restaurantId])
   @@index([categoryId])
+  @@index([restaurantId, isActive, isAvailable])
+  @@index([restaurantId, categoryId, isActive, isAvailable])
   @@map("menu_items")
 }
 
@@ -417,6 +424,9 @@ model Order {
   @@index([tableId])
   @@index([status])
   @@index([createdAt])
+  @@index([restaurantId, status, createdAt])
+  @@index([restaurantId, tableId, status])
+  @@index([restaurantId, waiterId, status])
   @@map("orders")
 }
 
@@ -495,6 +505,8 @@ model Payment {
   @@index([restaurantId])
   @@index([orderId])
   @@index([paidAt])
+  @@index([restaurantId, paidAt])
+  @@index([restaurantId, cashierId, paidAt])
   @@unique([restaurantId, providerPaymentId])
   @@map("payments")
 }
@@ -551,6 +563,8 @@ model Shift {
   @@index([restaurantId])
   @@index([userId])
   @@index([isActive])
+  @@index([restaurantId, isActive])
+  @@index([restaurantId, userId, isActive])
   @@map("shifts")
 }
 
@@ -580,6 +594,7 @@ model Expense {
   @@index([restaurantId])
   @@index([createdAt])
   @@index([isActive])
+  @@index([restaurantId, isActive, createdAt])
   @@map("expenses")
 }
 

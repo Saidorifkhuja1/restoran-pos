@@ -7,8 +7,8 @@ import { createNextAuthSession } from "@/lib/nextauth";
 import { badRequest, unauthorized, serverError, success } from "@/lib/responses";
 
 const loginSchema = z.object({
-  email: z.string().email("Noto'g'ri email"),
-  password: z.string().min(6, "Parol kamida 6 ta belgi bo'lishi kerak"),
+  email: z.string().trim().toLowerCase().email("Noto'g'ri email"),
+  password: z.string().trim().min(6, "Parol kamida 6 ta belgi bo'lishi kerak"),
 });
 
 type LoginRequest = z.infer<typeof loginSchema>;

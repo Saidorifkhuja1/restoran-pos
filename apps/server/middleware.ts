@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3001,http://127.0.0.1:3001")
+const defaultAllowedOrigins = [
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+  "http://localhost:3002",
+  "http://127.0.0.1:3002",
+  "http://localhost:3003",
+  "http://127.0.0.1:3003",
+].join(",");
+
+const allowedOrigins = (process.env.CORS_ORIGINS || defaultAllowedOrigins)
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -74,6 +83,8 @@ function memoryRateLimit(rateLimitKey: string, limit: number): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
   // Preflight
   if (request.method === "OPTIONS") {
     return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
@@ -81,7 +92,7 @@ export async function middleware(request: NextRequest) {
 
   // CSRF protection for mutations
   const isMutation = !["GET", "HEAD"].includes(request.method);
-  const isWebhook = request.nextUrl.pathname.startsWith("/api/webhooks/");
+  const isWebhook = pathname.startsWith("/api/webhooks/");
   if (isMutation && !isWebhook) {
     const origin = request.headers.get("origin");
     const csrfHeader = request.headers.get("x-restopos-csrf");
@@ -101,29 +112,36 @@ export async function middleware(request: NextRequest) {
   }
 
   // Rate limiting
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  const rateLimitKey = `${ip}:${request.nextUrl.pathname}`;
-  const limit = Number.parseInt(process.env.RATE_LIMIT_PER_MINUTE || "120", 10);
+  const shouldRateLimit =
+    isMutation ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/superadmin/auth/login" ||
+    pathname.startsWith("/api/admin/reports");
 
-  const redisAllowed = await redisRateLimit(rateLimitKey, limit);
+  if (shouldRateLimit) {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+    const rateLimitKey = `${ip}:${pathname}`;
+    const limit = Number.parseInt(process.env.RATE_LIMIT_PER_MINUTE || "120", 10);
+    const redisAllowed = await redisRateLimit(rateLimitKey, limit);
 
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.RATE_LIMIT_PROD_REDIS_ONLY === "true" &&
-    redisAllowed === null
-  ) {
-    return NextResponse.json(
-      { success: false, error: "Rate limit service unavailable" },
-      { status: 503, headers: corsHeaders(request) }
-    );
-  }
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.RATE_LIMIT_PROD_REDIS_ONLY === "true" &&
+      redisAllowed === null
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit service unavailable" },
+        { status: 503, headers: corsHeaders(request) }
+      );
+    }
 
-  const allowed = redisAllowed ?? memoryRateLimit(rateLimitKey, limit);
-  if (!allowed) {
-    return NextResponse.json(
-      { success: false, error: "Too Many Requests" },
-      { status: 429, headers: corsHeaders(request) }
-    );
+    const allowed = redisAllowed ?? memoryRateLimit(rateLimitKey, limit);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too Many Requests" },
+        { status: 429, headers: corsHeaders(request) }
+      );
+    }
   }
 
   // Apply headers

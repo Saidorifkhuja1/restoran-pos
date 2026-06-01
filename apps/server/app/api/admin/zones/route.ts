@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success } from "@/lib/responses";
-import { UserToken } from "@restopos/types";
+import { unauthorized, badRequest, serverError, success } from "@/lib/responses";
+import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
+import { UserRole } from "@restopos/types";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 const createZoneSchema = z.object({
@@ -10,7 +11,8 @@ const createZoneSchema = z.object({
   color: z.string().regex(/^#[0-9A-F]{6}$/i, "Noto'g'ri rang"),
 });
 
-type CreateZoneRequest = z.infer<typeof createZoneSchema>;
+const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
+const writeRoles = [UserRole.ADMIN, UserRole.MANAGER] as const;
 
 /**
  * GET /api/admin/zones
@@ -18,17 +20,8 @@ type CreateZoneRequest = z.infer<typeof createZoneSchema>;
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthContext(request);
-
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (!["ADMIN", "MANAGER", "WAITER", "CASHIER"].includes(token.role)) {
-      return forbidden("Ruxsat kerak");
-    }
+    const token = await getRestaurantToken(request, readRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
     const zones = await prisma.zone.findMany({
       where: { restaurantId: token.restaurantId, isActive: true },
@@ -53,28 +46,12 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthContext(request);
+    const token = await getRestaurantToken(request, writeRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (!["ADMIN", "MANAGER"].includes(token.role)) {
-      return forbidden("Ruxsat kerak");
-    }
-
-    const body = await request.json();
-    const parseResult = createZoneSchema.safeParse(body);
-
-    if (!parseResult.success) {
-      return badRequest(
-        parseResult.error.errors[0]?.message || "Validation error"
-      );
-    }
-
-    const data = parseResult.data as CreateZoneRequest;
+    const parsed = createZoneSchema.safeParse(await request.json());
+    if (!parsed.success) return badRequest(zodMessage(parsed.error));
+    const data = parsed.data;
 
     // Check if zone with same name exists
     const existing = await prisma.zone.findFirst({

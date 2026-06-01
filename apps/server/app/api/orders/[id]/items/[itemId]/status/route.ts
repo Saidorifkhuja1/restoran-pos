@@ -25,9 +25,12 @@ export async function PUT(request: NextRequest, context: RouteParams) {
 
     const order = await prisma.order.findFirst({
       where: { id: params.id, restaurantId: token.restaurantId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!order) return notFound("Buyurtma topilmadi");
+    if (["BILL", "PAID", "CANCELLED"].includes(order.status)) {
+      return forbidden("Yopilgan buyurtma taomlarini o'zgartirib bo'lmaydi");
+    }
 
     if (token.role === UserRole.KITCHEN && !["COOKING", "DONE"].includes(parsed.data.status)) {
       return forbidden("KDS faqat tayyorlash statusini o'zgartiradi");
@@ -39,26 +42,30 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     });
     if (!existingItem) return notFound("Taom topilmadi");
 
-    const item = await prisma.orderItem.update({
-      where: { id: existingItem.id },
-      data: {
-        status: parsed.data.status,
-        doneAt: parsed.data.status === "DONE" ? new Date() : null,
-      },
-      select: { id: true, orderId: true, status: true, doneAt: true },
-    });
+    const { item, updatedOrder } = await prisma.$transaction(async (tx) => {
+      const updatedItem = await tx.orderItem.update({
+        where: { id: existingItem.id },
+        data: {
+          status: parsed.data.status,
+          doneAt: parsed.data.status === "DONE" ? new Date() : null,
+        },
+        select: { id: true, orderId: true, status: true, doneAt: true },
+      });
 
-    const remaining = await prisma.orderItem.count({
-      where: { orderId: order.id, status: { notIn: ["DONE", "CANCELLED"] } },
+      const remaining = await tx.orderItem.count({
+        where: { orderId: order.id, status: { notIn: ["DONE", "CANCELLED"] } },
+      });
+      const maybeUpdatedOrder =
+        remaining === 0
+          ? await tx.order.update({
+              where: { id: order.id },
+              data: { status: "READY", readyAt: new Date() },
+              select: { id: true, status: true, readyAt: true },
+            })
+          : null;
+
+      return { item: updatedItem, updatedOrder: maybeUpdatedOrder };
     });
-    const updatedOrder =
-      remaining === 0
-        ? await prisma.order.update({
-            where: { id: order.id },
-            data: { status: "READY", readyAt: new Date() },
-            select: { id: true, status: true, readyAt: true },
-          })
-        : null;
 
     await publishEvent(restaurantChannel(token.restaurantId), "kitchen:item-done", {
       orderId: order.id,

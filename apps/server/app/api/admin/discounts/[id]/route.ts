@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getAuthContext, unauthorized, forbidden, badRequest, serverError, success, notFound } from "@/lib/responses";
-import { UserToken } from "@restopos/types";
+import { unauthorized, badRequest, serverError, success, notFound } from "@/lib/responses";
+import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
+import { UserRole } from "@restopos/types";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
 
 type RouteParams = {
@@ -19,6 +20,8 @@ const updateDiscountSchema = z.object({
 });
 
 type UpdateDiscountRequest = z.infer<typeof updateDiscountSchema>;
+const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER] as const;
+const writeRoles = [UserRole.ADMIN] as const;
 
 /**
  * GET /api/admin/discounts/[id]
@@ -27,20 +30,11 @@ type UpdateDiscountRequest = z.infer<typeof updateDiscountSchema>;
 export async function GET(request: NextRequest, context: RouteParams) {
   try {
     const params = await context.params;
-    const auth = await getAuthContext(request);
+    const token = await getRestaurantToken(request, readRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (!["ADMIN", "MANAGER", "CASHIER"].includes(token.role)) {
-      return forbidden("Ruxsat kerak");
-    }
-
-    const discount = await prisma.discount.findUnique({
-      where: { id: params.id },
+    const discount = await prisma.discount.findFirst({
+      where: { id: params.id, restaurantId: token.restaurantId },
       include: {
         _count: {
           select: { payments: true },
@@ -50,11 +44,6 @@ export async function GET(request: NextRequest, context: RouteParams) {
 
     if (!discount) {
       return notFound("Chegirma topilmadi");
-    }
-
-    // Check permission
-    if (discount.restaurantId !== token.restaurantId) {
-      return forbidden("Boshqa restoran chegirmasini ko'ra olmaysiz");
     }
 
     return success(discount);
@@ -71,39 +60,24 @@ export async function GET(request: NextRequest, context: RouteParams) {
 export async function PUT(request: NextRequest, context: RouteParams) {
   try {
     const params = await context.params;
-    const auth = await getAuthContext(request);
-
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (token.role !== "ADMIN") {
-      return forbidden("Admin ruxsat kerak");
-    }
+    const token = await getRestaurantToken(request, writeRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
     // Check if discount exists and belongs to this restaurant
-    const existingDiscount = await prisma.discount.findUnique({
-      where: { id: params.id },
-      select: { restaurantId: true },
+    const existingDiscount = await prisma.discount.findFirst({
+      where: { id: params.id, restaurantId: token.restaurantId },
+      select: { id: true, type: true, value: true },
     });
 
     if (!existingDiscount) {
       return notFound("Chegirma topilmadi");
     }
 
-    if (existingDiscount.restaurantId !== token.restaurantId) {
-      return forbidden("Boshqa restoran chegirmasini tahrirlaya olmaysiz");
-    }
-
     const body = await request.json();
     const parseResult = updateDiscountSchema.safeParse(body);
 
     if (!parseResult.success) {
-      return badRequest(
-        parseResult.error.errors[0]?.message || "Validation error"
-      );
+      return badRequest(zodMessage(parseResult.error));
     }
 
     const data = parseResult.data as UpdateDiscountRequest;
@@ -124,23 +98,10 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     }
 
     // Validate value
-    if (data.value !== undefined) {
-      if (data.value < 1) {
-        return badRequest("Qiymat 1 dan katta bo'lishi kerak");
-      }
-
-      // If type is PERCENT, validate percentage
-      const discount = await prisma.discount.findUnique({
-        where: { id: params.id },
-        select: { type: true },
-      });
-
-      if (
-        (data.type === "PERCENT" || discount?.type === "PERCENT") &&
-        data.value > 100
-      ) {
-        return badRequest("Foiz 100 dan oshmasligi kerak");
-      }
+    const nextType = data.type ?? existingDiscount.type;
+    const nextValue = data.value ?? existingDiscount.value;
+    if (nextType === "PERCENT" && nextValue > 100) {
+      return badRequest("Foiz 100 dan oshmasligi kerak");
     }
 
     const updated = await prisma.discount.update({
@@ -172,30 +133,17 @@ export async function PUT(request: NextRequest, context: RouteParams) {
 export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
     const params = await context.params;
-    const auth = await getAuthContext(request);
-
-    if (!auth.isRestaurantUser) {
-      return unauthorized("Kirish uchun login qiling");
-    }
-
-    const token = auth.token as UserToken;
-
-    if (token.role !== "ADMIN") {
-      return forbidden("Admin ruxsat kerak");
-    }
+    const token = await getRestaurantToken(request, writeRoles);
+    if (!token) return unauthorized("Kirish uchun login qiling");
 
     // Check if discount exists and belongs to this restaurant
-    const existingDiscount = await prisma.discount.findUnique({
-      where: { id: params.id },
-      select: { restaurantId: true },
+    const existingDiscount = await prisma.discount.findFirst({
+      where: { id: params.id, restaurantId: token.restaurantId },
+      select: { id: true },
     });
 
     if (!existingDiscount) {
       return notFound("Chegirma topilmadi");
-    }
-
-    if (existingDiscount.restaurantId !== token.restaurantId) {
-      return forbidden("Boshqa restoran chegirmasini o'chira olmaysiz");
     }
 
     // Soft delete

@@ -86,7 +86,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       return updated;
     });
 
-    await Promise.all([
+    const events = [
       writeAuditLog(request, {
         restaurantId: token.restaurantId,
         action: "STATUS_UPDATE",
@@ -98,11 +98,16 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       nextStatus === "BILL"
         ? publishEvent(cashierChannel(token.restaurantId), "bill-requested", order)
         : Promise.resolve(),
-      publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+    ];
+
+    if (nextStatus === "BILL" || nextStatus === "CANCELLED") {
+      events.push(publishEvent(restaurantChannel(token.restaurantId), "table:status", {
         tableId: existing.tableId,
-        status: nextStatus === "BILL" ? "BILL_REQUESTED" : nextStatus === "CANCELLED" ? "FREE" : undefined,
-      }),
-    ]);
+        status: nextStatus === "BILL" ? "BILL_REQUESTED" : "FREE",
+      }));
+    }
+
+    await Promise.all(events);
 
     return success(order);
   } catch (error) {

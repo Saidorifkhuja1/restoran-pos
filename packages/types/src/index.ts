@@ -91,8 +91,8 @@ export type JWTPayload = SuperAdminToken | UserToken;
 
 // Request types
 export type LoginRequest = {
-  restaurantId: string;
-  pin: string;
+  login: string;
+  password: string;
 };
 
 export type SuperAdminLoginRequest = {

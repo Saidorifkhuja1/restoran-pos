@@ -4,23 +4,19 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { setAuthCookie, signUserToken } from "@/lib/auth";
 import { createNextAuthSession } from "@/lib/nextauth";
-import { badRequest, unauthorized, serverError, success, notFound } from "@/lib/responses";
+import { badRequest, unauthorized, serverError, success } from "@/lib/responses";
 import { zodMessage } from "@/lib/route-helpers";
 
 const loginSchema = z.object({
-  login: z.string().min(2, "Login majburiy").optional(),
-  password: z.string().min(4, "Parol kamida 4 ta belgi bo'lishi kerak").optional(),
-  restaurantId: z.string().min(1, "Restoran ID majburiy").optional(),
-  pin: z.string().min(4, "PIN kamida 4 ta raqam bo'lishi kerak").regex(/^\d+$/, "PIN faqat raqamlardan iborat bo'lishi kerak").optional(),
-}).refine((data) => Boolean((data.login && data.password) || (data.restaurantId && data.pin)), {
-  message: "Login/parol majburiy",
+  login: z.string().trim().min(2, "Ism majburiy"),
+  password: z.string().trim().min(4, "Parol kamida 4 ta belgi bo'lishi kerak"),
 });
 
 type LoginRequest = z.infer<typeof loginSchema>;
 
 /**
  * POST /api/auth/login
- * Restaurant staff PIN login
+ * Restaurant staff name + password login
  */
 export async function POST(request: NextRequest) {
   try {
@@ -33,78 +29,32 @@ export async function POST(request: NextRequest) {
     }
 
     const { login, password } = parseResult.data as LoginRequest;
-    let restaurantId = parseResult.data.restaurantId;
-    const pin = (parseResult.data.pin ?? password)?.trim();
-    if (!pin) {
-      return badRequest("Parol majburiy");
-    }
 
-    const normalizedLogin = login?.trim();
-    const roleLogin = normalizedLogin?.toUpperCase();
-    const userCandidates = normalizedLogin
-      ? await prisma.user.findMany({
-          where: {
-            isActive: true,
-            OR: [
-              { phone: normalizedLogin },
-              { name: { equals: normalizedLogin, mode: "insensitive" } },
-              ...(roleLogin && ["ADMIN", "MANAGER", "WAITER", "KITCHEN", "CASHIER"].includes(roleLogin) ? [{ role: roleLogin as "ADMIN" | "MANAGER" | "WAITER" | "KITCHEN" | "CASHIER" }] : []),
-            ],
-          },
-          include: {
-            restaurant: {
-              select: {
-                id: true,
-                name: true,
-                currency: true,
-                taxPercent: true,
-                isActive: true,
-              },
-            },
-          },
-        })
-      : [];
-
-    const legacyRestaurant = restaurantId
-      ? await prisma.restaurant.findUnique({
-          where: { id: restaurantId },
-          select: { id: true, isActive: true },
-        })
-      : null;
-
-    if (!normalizedLogin && !legacyRestaurant) {
-      return notFound("Restoran topilmadi");
-    }
-
-    if (legacyRestaurant && !legacyRestaurant.isActive) {
-      return unauthorized("Bu restoran faollashtirilmagan");
-    }
-
-    const users = normalizedLogin
-      ? userCandidates
-      : await prisma.user.findMany({
-          where: {
-            restaurantId,
+    const users = await prisma.user.findMany({
+      where: {
+        name: { equals: login, mode: "insensitive" },
+        isActive: true,
+      },
+      include: {
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            currency: true,
+            taxPercent: true,
             isActive: true,
           },
-          include: {
-            restaurant: {
-              select: {
-                id: true,
-                name: true,
-                currency: true,
-                taxPercent: true,
-                isActive: true,
-              },
-            },
-          },
-        });
+        },
+      },
+      take: 25,
+      orderBy: { updatedAt: "desc" },
+    });
 
     const user = (
       await Promise.all(
         users.map(async (candidate) => ({
           candidate,
-          matches: await bcrypt.compare(pin, candidate.pin),
+          matches: await bcrypt.compare(password, candidate.pin),
         }))
       )
     ).find(({ matches }) => matches)?.candidate;
@@ -125,8 +75,8 @@ export async function POST(request: NextRequest) {
     // NextAuth session is best-effort; the cookie-based JWT is the primary auth
     createNextAuthSession({
       flow: "STAFF",
-      restaurantId: authRestaurantId,
-      pin,
+      login,
+      password,
     }).catch(() => undefined);
 
     const response = success({
