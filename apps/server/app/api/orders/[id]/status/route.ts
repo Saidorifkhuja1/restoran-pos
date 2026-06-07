@@ -5,6 +5,7 @@ import { badRequest, forbidden, notFound, serverError, success, unauthorized } f
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { cashierChannel, publishEvent, restaurantChannel } from "@/lib/pusher";
 import { writeAuditLog } from "@/lib/audit";
+import { syncTableState } from "@/lib/table-status";
 import { UserRole } from "@restopos/types";
 
 type RouteParams = {
@@ -60,7 +61,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       return forbidden("Bu statusni o'zgartirishga ruxsat yo'q");
     }
 
-    const order = await prisma.$transaction(async (tx) => {
+    const { order, table } = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id: params.id },
         data: {
@@ -72,21 +73,14 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         select: { id: true, restaurantId: true, orderNumber: true, status: true, tableId: true },
       });
 
-      if (nextStatus === "BILL") {
-        await tx.table.update({ where: { id: existing.tableId }, data: { status: "BILL_REQUESTED" } });
-      }
+      const tableState = ["BILL", "CANCELLED"].includes(nextStatus)
+        ? await syncTableState(tx, existing.tableId, token.restaurantId)
+        : null;
 
-      if (nextStatus === "CANCELLED") {
-        await tx.table.update({
-          where: { id: existing.tableId },
-          data: { status: "FREE", currentOrderId: null },
-        });
-      }
-
-      return updated;
+      return { order: updated, table: tableState };
     });
 
-    const events = [
+    await Promise.all([
       writeAuditLog(request, {
         restaurantId: token.restaurantId,
         action: "STATUS_UPDATE",
@@ -98,16 +92,14 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       nextStatus === "BILL"
         ? publishEvent(cashierChannel(token.restaurantId), "bill-requested", order)
         : Promise.resolve(),
-    ];
-
-    if (nextStatus === "BILL" || nextStatus === "CANCELLED") {
-      events.push(publishEvent(restaurantChannel(token.restaurantId), "table:status", {
-        tableId: existing.tableId,
-        status: nextStatus === "BILL" ? "BILL_REQUESTED" : "FREE",
-      }));
-    }
-
-    await Promise.all(events);
+      table
+        ? publishEvent(restaurantChannel(token.restaurantId), "table:status", {
+            tableId: existing.tableId,
+            status: table.status,
+            currentOrderId: table.currentOrderId,
+          })
+        : Promise.resolve(),
+    ]);
 
     return success(order);
   } catch (error) {

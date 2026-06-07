@@ -1,4 +1,5 @@
 import Pusher from "pusher";
+import { emitRealtime } from "@/lib/realtime-bus";
 
 const appId = process.env.PUSHER_APP_ID;
 const key = process.env.PUSHER_KEY;
@@ -10,15 +11,20 @@ export const pusher: Pusher | null =
     ? new Pusher({ appId, key, secret, cluster, useTLS: true })
     : null;
 
+export function privateChannel(channel: string): string {
+  return `private-${channel}`;
+}
+
 export async function publishEvent<T>(
   channel: string,
   event: string,
   payload: T
 ): Promise<void> {
+  emitRealtime({ channel, event, payload });
   if (!pusher) return;
 
   try {
-    await pusher.trigger(channel, event, payload);
+    await pusher.trigger(privateChannel(channel), event, payload);
   } catch (error) {
     console.error("[Pusher Error]", event, error);
   }

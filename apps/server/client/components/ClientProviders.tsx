@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthBootstrap } from "@/client/components/AuthBootstrap";
+import { useRealtimeInvalidation } from "@/client/hooks/useRealtimeInvalidation";
 import { AuthRole } from "@/client/store/authStore";
 
 function makeQueryClient() {
@@ -22,6 +23,11 @@ type ClientProvidersProps = {
   children: React.ReactNode;
   loginPath?: string;
 };
+
+function RealtimeBridge() {
+  useRealtimeInvalidation();
+  return null;
+}
 
 export function ClientProviders({
   allowedRoles,
@@ -62,6 +68,7 @@ export function ClientProviders({
   return (
     <QueryClientProvider client={queryClient}>
       <AuthBootstrap allowedRoles={allowedRoles} loginPath={loginPath}>
+        <RealtimeBridge />
         {children}
       </AuthBootstrap>
     </QueryClientProvider>

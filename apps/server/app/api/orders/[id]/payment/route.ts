@@ -6,6 +6,7 @@ import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { cashierChannel, publishEvent, restaurantChannel } from "@/lib/pusher";
 import { deleteCacheByPattern } from "@/lib/redis";
 import { writeAuditLog } from "@/lib/audit";
+import { syncTableState } from "@/lib/table-status";
 import { UserRole } from "@restopos/types";
 
 type RouteParams = {
@@ -13,11 +14,9 @@ type RouteParams = {
 };
 
 const paymentSchema = z.object({
-  method: z.enum(["CASH", "CARD", "QR", "MIXED"]),
+  method: z.enum(["CASH", "CARD"]),
   discountId: z.string().min(1).optional(),
   receivedAmount: z.number().int().nonnegative().optional(),
-  cashAmount: z.number().int().nonnegative().default(0),
-  cardAmount: z.number().int().nonnegative().default(0),
   receiptPrinted: z.boolean().default(false),
 });
 
@@ -44,7 +43,6 @@ export async function POST(request: NextRequest, context: RouteParams) {
         status: true,
         waiterId: true,
         items: { select: { price: true, quantity: true, status: true } },
-        restaurant: { select: { taxPercent: true } },
         payment: { select: { id: true } },
       },
     });
@@ -74,20 +72,15 @@ export async function POST(request: NextRequest, context: RouteParams) {
       discountPercent = discount.type === "PERCENT" ? discount.value : 0;
     }
 
-    const taxable = Math.max(0, subtotal - discountAmount);
-    const taxPercent = order.restaurant.taxPercent;
-    const taxAmount = Math.round((taxable * taxPercent) / 100);
-    const totalAmount = taxable + taxAmount;
+    const totalAmount = Math.max(0, subtotal - discountAmount);
+    const taxPercent = 0;
+    const taxAmount = 0;
 
     if (data.method === "CASH" && (data.receivedAmount ?? 0) < totalAmount) {
       return badRequest("Naqd qabul qilingan summa yetarli emas");
     }
 
-    if (data.method === "MIXED" && data.cashAmount + data.cardAmount !== totalAmount) {
-      return badRequest("Mixed to'lov summasi yakuniy summaga teng bo'lishi kerak");
-    }
-
-    const payment = await prisma.$transaction(async (tx) => {
+    const { payment, table } = await prisma.$transaction(async (tx) => {
       const payableOrder = await tx.order.updateMany({
         where: {
           id: order.id,
@@ -123,8 +116,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
           totalAmount,
           receivedAmount: data.receivedAmount,
           changeAmount: data.method === "CASH" ? (data.receivedAmount ?? 0) - totalAmount : 0,
-          cashAmount: data.method === "MIXED" ? data.cashAmount : data.method === "CASH" ? totalAmount : 0,
-          cardAmount: data.method === "MIXED" ? data.cardAmount : data.method === "CARD" ? totalAmount : 0,
+          cashAmount: data.method === "CASH" ? totalAmount : 0,
+          cardAmount: data.method === "CARD" ? totalAmount : 0,
           receiptNumber,
           receiptPrinted: data.receiptPrinted,
         },
@@ -148,16 +141,13 @@ export async function POST(request: NextRequest, context: RouteParams) {
         },
       });
 
-      await tx.table.updateMany({
-        where: { id: order.tableId, restaurantId: token.restaurantId, currentOrderId: order.id },
-        data: { status: "FREE", currentOrderId: null },
-      });
+      const tableState = await syncTableState(tx, order.tableId, token.restaurantId);
       await tx.shift.updateMany({
         where: { restaurantId: token.restaurantId, userId: order.waiterId, isActive: true },
         data: { totalSales: { increment: totalAmount }, totalOrders: { increment: 1 } },
       });
 
-      return created;
+      return { payment: created, table: tableState };
     });
 
     await Promise.all([
@@ -182,8 +172,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
       }),
       publishEvent(restaurantChannel(token.restaurantId), "table:status", {
         tableId: order.tableId,
-        status: "FREE",
-        currentOrderId: null,
+        status: table.status,
+        currentOrderId: table.currentOrderId,
       }),
     ]);
 

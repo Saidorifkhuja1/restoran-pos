@@ -8,7 +8,6 @@ import { useReactToPrint } from "react-to-print";
 import { z } from "zod";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { Modal, PageTitle, Panel } from "@/client/components/ui";
-import { usePusherEvent } from "@/client/hooks/usePusher";
 import { useAuthStore } from "@/client/store/authStore";
 
 type PendingOrder = {
@@ -21,15 +20,13 @@ type PendingOrder = {
 };
 type Discount = { id: string; name: string; type: "PERCENT" | "FIXED"; value: number };
 type Settings = { autoPrintReceipt: boolean };
-type PaymentMethod = "CASH" | "CARD" | "QR" | "MIXED";
+type PaymentMethod = "CASH" | "CARD";
 type PaymentResponse = { receiptNumber?: string | null; method: PaymentMethod; totalAmount: number };
 
 const paymentSchema = z.object({
-  method: z.enum(["CASH", "CARD", "QR", "MIXED"]),
+  method: z.enum(["CASH", "CARD"]),
   discountId: z.string().optional(),
   receivedAmount: z.coerce.number().min(0),
-  cashAmount: z.coerce.number().min(0),
-  cardAmount: z.coerce.number().min(0),
 });
 type PaymentForm = z.infer<typeof paymentSchema>;
 
@@ -41,7 +38,7 @@ export function CashierPage() {
   const [paidReceipt, setPaidReceipt] = useState<PaymentResponse | null>(null);
   const form = useForm<PaymentForm>({
     resolver: zodResolver(paymentSchema),
-    defaultValues: { method: "CASH", discountId: "", receivedAmount: 0, cashAmount: 0, cardAmount: 0 },
+    defaultValues: { method: "CASH", discountId: "", receivedAmount: 0 },
   });
   const method = form.watch("method");
   const discountId = form.watch("discountId") || "";
@@ -49,17 +46,10 @@ export function CashierPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const printReceipt = useReactToPrint({ contentRef: receiptRef });
 
-  usePusherEvent(restaurant?.id ? `cashier:${restaurant.id}` : null, "bill-requested", () => {
-    void queryClient.invalidateQueries({ queryKey: ["cashier-pending"] });
-  });
-  usePusherEvent(restaurant?.id ? `cashier:${restaurant.id}` : null, "payment-done", () => {
-    void queryClient.invalidateQueries({ queryKey: ["cashier-pending"] });
-  });
-
   const pending = useQuery({
     queryKey: ["cashier-pending"],
     queryFn: () => getData<Paginated<PendingOrder>>("/cashier/pending?limit=50"),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
   const discounts = useQuery({
     queryKey: ["discounts"],
@@ -80,8 +70,7 @@ export function CashierPage() {
       ? Math.round((selectedTotal * selectedDiscount.value) / 100)
       : Math.min(selectedDiscount.value, selectedTotal)
     : 0;
-  const taxAmount = Math.round((selectedTotal - discountAmount) * ((restaurant?.taxPercent || 12) / 100));
-  const finalTotal = Math.max(0, selectedTotal - discountAmount + taxAmount);
+  const finalTotal = Math.max(0, selectedTotal - discountAmount);
 
   const pay = useMutation({
     mutationFn: ({ order, values }: { order: { id: string }; values: PaymentForm }) =>
@@ -89,8 +78,6 @@ export function CashierPage() {
         method: values.method,
         discountId: values.discountId || undefined,
         receivedAmount: values.method === "CASH" ? values.receivedAmount : undefined,
-        cashAmount: values.method === "MIXED" ? values.cashAmount : 0,
-        cardAmount: values.method === "MIXED" ? values.cardAmount : 0,
         receiptPrinted: Boolean(settings.data?.autoPrintReceipt),
       }),
     onSuccess: async (response) => {
@@ -110,9 +97,7 @@ export function CashierPage() {
     form.reset({
       method: "CASH",
       discountId: "",
-      receivedAmount: Math.round(total * (1 + (restaurant?.taxPercent || 12) / 100)),
-      cashAmount: 0,
-      cardAmount: 0,
+      receivedAmount: total,
     });
   }
   useEffect(() => {
@@ -146,20 +131,14 @@ export function CashierPage() {
         <Modal title={`To'lov #${selectedOrder.orderNumber}`} onClose={() => setSelectedOrder(null)}>
           <form className="space-y-3" onSubmit={form.handleSubmit((values) => pay.mutate({ order: selectedOrder, values }))}>
             <select aria-label="To'lov usuli" className="w-full rounded-md border px-3 py-2" {...form.register("method")}>
-              <option value="CASH">CASH</option><option value="CARD">CARD</option><option value="QR">QR</option><option value="MIXED">MIXED</option>
+              <option value="CASH">Naqd</option><option value="CARD">Karta</option>
             </select>
             <select aria-label="Chegirma" className="w-full rounded-md border px-3 py-2" {...form.register("discountId")}>
               <option value="">Chegirma yo'q</option>
               {discounts.data?.items.map((discount) => <option value={discount.id} key={discount.id}>{discount.name}</option>)}
             </select>
             {method === "CASH" ? <input aria-label="Qabul qilingan summa" className="w-full rounded-md border px-3 py-2" type="number" {...form.register("receivedAmount")} /> : null}
-            {method === "MIXED" ? (
-              <div className="grid grid-cols-2 gap-2">
-                <input aria-label="Naqd summa" className="rounded-md border px-3 py-2" type="number" placeholder="Naqd" {...form.register("cashAmount")} />
-                <input aria-label="Karta summa" className="rounded-md border px-3 py-2" type="number" placeholder="Karta" {...form.register("cardAmount")} />
-              </div>
-            ) : null}
-            <ReceiptTotals subtotal={selectedTotal} discount={discountAmount} tax={taxAmount} total={finalTotal} change={method === "CASH" ? Math.max(0, receivedAmount - finalTotal) : undefined} />
+            <ReceiptTotals subtotal={selectedTotal} discount={discountAmount} total={finalTotal} change={method === "CASH" ? Math.max(0, receivedAmount - finalTotal) : undefined} />
             {pay.error ? <div className="text-sm text-rose-600">To'lov yakunlanmadi</div> : null}
             <button className="w-full rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={pay.isPending}>{pay.isPending ? "Yakunlanmoqda..." : "To'lovni yakunlash"}</button>
           </form>
@@ -183,7 +162,7 @@ export function CashierPage() {
               </div>
             ))}
             <div className="my-2 border-t border-dashed border-slate-400" />
-            <ReceiptTotals subtotal={selectedOrder?.id === previewOrder.id ? selectedTotal : previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0)} discount={selectedOrder?.id === previewOrder.id ? discountAmount : 0} tax={selectedOrder?.id === previewOrder.id ? taxAmount : Math.round(previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * ((restaurant?.taxPercent || 12) / 100))} total={selectedOrder?.id === previewOrder.id ? finalTotal : Math.round(previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0) * (1 + (restaurant?.taxPercent || 12) / 100))} />
+            <ReceiptTotals subtotal={selectedOrder?.id === previewOrder.id ? selectedTotal : previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0)} discount={selectedOrder?.id === previewOrder.id ? discountAmount : 0} total={selectedOrder?.id === previewOrder.id ? finalTotal : previewOrder.items.reduce((sum, item) => sum + item.price * item.quantity, 0)} />
             <div className="mt-2 flex justify-between"><span>To'lov</span><span>{paidReceipt?.method || method}</span></div>
             <div className="mt-3 text-center">Rahmat!</div>
           </div>
@@ -194,12 +173,11 @@ export function CashierPage() {
   );
 }
 
-function ReceiptTotals({ subtotal, discount, tax, total, change }: { subtotal: number; discount: number; tax: number; total: number; change?: number }) {
+function ReceiptTotals({ subtotal, discount, total, change }: { subtotal: number; discount: number; total: number; change?: number }) {
   return (
     <div className="rounded-md bg-slate-50 p-3 text-sm print:bg-white print:p-0">
       <div className="flex justify-between"><span>Subtotal</span><span>{subtotal.toLocaleString("uz-UZ")}</span></div>
       <div className="flex justify-between"><span>Chegirma</span><span>{discount.toLocaleString("uz-UZ")}</span></div>
-      <div className="flex justify-between"><span>QQS</span><span>{tax.toLocaleString("uz-UZ")}</span></div>
       <div className="flex justify-between font-semibold"><span>Jami</span><span>{total.toLocaleString("uz-UZ")}</span></div>
       {change !== undefined ? <div className="flex justify-between"><span>Qaytim</span><span>{change.toLocaleString("uz-UZ")}</span></div> : null}
     </div>

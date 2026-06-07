@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { publishEvent, restaurantChannel } from "@/lib/pusher";
 import { badRequest, forbidden, serverError, success, unauthorized } from "@/lib/responses";
 import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { UserRole } from "@restopos/types";
@@ -74,7 +75,13 @@ export async function POST(request: NextRequest) {
       select: { id: true, userId: true, amount: true, note: true, createdAt: true },
     });
 
-    return success({ ...salary, userName: user.name }, 201);
+    const response = { ...salary, userName: user.name };
+    await publishEvent(restaurantChannel(token.restaurantId), "salary:updated", {
+      action: "created",
+      salary: response,
+    });
+
+    return success(response, 201);
   } catch (error) {
     console.error("[Create Salary Error]", error);
     return serverError("Maosh yaratishda xato");

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound, serverError, success, unauthorized } from "@/lib/responses";
 import { getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { publishEvent, restaurantChannel } from "@/lib/pusher";
+import { syncTableState } from "@/lib/table-status";
 import { UserRole } from "@restopos/types";
 
 type RouteParams = { params: Promise<{ id: string; tableId: string }> };
@@ -39,10 +40,29 @@ export async function GET(request: NextRequest, context: RouteParams) {
         status: true,
         currentOrderId: true,
         zone: { select: { id: true, name: true, color: true } },
+        orders: {
+          where: {
+            status: { notIn: ["PAID", "CANCELLED"] },
+            OR: [{ note: null }, { note: { notIn: ["Kuryer", "Olib ketish"] } }],
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+          select: { id: true, status: true },
+        },
       },
     });
     if (!table) return notFound("Stol topilmadi");
-    return success(table);
+    const { orders, ...data } = table;
+    const activeOrder = orders[0];
+    return success(
+      activeOrder
+        ? {
+            ...data,
+            status: activeOrder.status === "BILL" ? "BILL_REQUESTED" : "OCCUPIED",
+            currentOrderId: activeOrder.id,
+          }
+        : { ...data, status: data.status === "RESERVED" ? data.status : "FREE", currentOrderId: null }
+    );
   } catch (error) {
     console.error("[Get Table Error]", error);
     return serverError("Stolni olishda xato");
@@ -73,9 +93,13 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       if (!zone) return badRequest("Zona topilmadi");
     }
 
-    const table = await prisma.table.update({
+    await prisma.table.update({
       where: { id: params.tableId },
       data: parsed.data,
+    });
+    const table = await syncTableState(prisma, params.tableId, token.restaurantId);
+    const updated = await prisma.table.findUnique({
+      where: { id: params.tableId },
       select: {
         id: true,
         number: true,
@@ -87,9 +111,10 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         currentOrderId: true,
       },
     });
+    if (!updated) return notFound("Stol topilmadi");
 
     await publishEvent(restaurantChannel(token.restaurantId), "table:status", table);
-    return success(table);
+    return success(updated);
   } catch (error) {
     console.error("[Update Table Error]", error);
     return serverError("Stolni yangilashda xato");

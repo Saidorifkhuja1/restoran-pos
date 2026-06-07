@@ -1,6 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { ArrowLeft } from "lucide-react";
 
 export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -42,11 +43,15 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-md border border-slate-200 bg-white p-4 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-          <Dialog.Close className="rounded-md border px-2 py-1 text-sm">
-            Yopish
+        <div className="mb-4 flex items-center gap-3">
+          <Dialog.Close
+            aria-label="Orqaga"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100"
+            title="Orqaga"
+          >
+            <ArrowLeft size={18} />
           </Dialog.Close>
+          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
         </div>
         {children}
         </Dialog.Content>

@@ -30,6 +30,35 @@ export async function GET(request: NextRequest, context: RouteParams) {
     if (token.restaurantId !== params.id) return forbidden("Boshqa restoran ma'lumotiga ruxsat yo'q");
 
     const { page, limit, skip } = getPagination(request);
+    const expiredReservationCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const expiredReservations = await prisma.reservation.findMany({
+      where: {
+        restaurantId: token.restaurantId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        scheduledAt: { lt: expiredReservationCutoff },
+      },
+      select: { id: true, tableId: true },
+    });
+
+    if (expiredReservations.length > 0) {
+      const reservationIds = expiredReservations.map((reservation) => reservation.id);
+      const tableIds = [...new Set(expiredReservations.map((reservation) => reservation.tableId))];
+      await prisma.$transaction([
+        prisma.reservation.updateMany({
+          where: { id: { in: reservationIds } },
+          data: { status: "NO_SHOW" },
+        }),
+        prisma.table.updateMany({
+          where: {
+            id: { in: tableIds },
+            status: "RESERVED",
+            reservations: { none: { status: { in: ["PENDING", "CONFIRMED"] } } },
+          },
+          data: { status: "FREE", currentOrderId: null },
+        }),
+      ]);
+    }
+
     const [items, total] = await Promise.all([
       prisma.table.findMany({
         where: { restaurantId: token.restaurantId },
@@ -47,13 +76,35 @@ export async function GET(request: NextRequest, context: RouteParams) {
           status: true,
           currentOrderId: true,
           zone: { select: { id: true, name: true, color: true } },
+          orders: {
+            where: {
+              status: { notIn: ["PAID", "CANCELLED"] },
+              OR: [{ note: null }, { note: { notIn: ["Kuryer", "Olib ketish"] } }],
+            },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { id: true, status: true },
+          },
         },
         orderBy: [{ zone: { sortOrder: "asc" } }, { number: "asc" }],
       }),
       prisma.table.count({ where: { restaurantId: token.restaurantId } }),
     ]);
 
-    return success({ items, total, page, limit });
+    return success({
+      items: items.map(({ orders, ...table }) => {
+        const activeOrder = orders[0];
+        if (!activeOrder) return { ...table, status: table.status === "RESERVED" ? table.status : "FREE", currentOrderId: null };
+        return {
+          ...table,
+          status: activeOrder.status === "BILL" ? "BILL_REQUESTED" : "OCCUPIED",
+          currentOrderId: activeOrder.id,
+        };
+      }),
+      total,
+      page,
+      limit,
+    });
   } catch (error) {
     console.error("[Get Tables Error]", error);
     return serverError("Stollarni olishda xato");

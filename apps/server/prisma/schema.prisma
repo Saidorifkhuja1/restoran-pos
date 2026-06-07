@@ -320,6 +320,8 @@ model Reservation {
   @@index([tableId])
   @@index([status])
   @@index([scheduledAt])
+  @@index([restaurantId, status, scheduledAt])
+  @@index([tableId, status])
   @@map("reservations")
 }
 
@@ -427,6 +429,8 @@ model Order {
   @@index([restaurantId, status, createdAt])
   @@index([restaurantId, tableId, status])
   @@index([restaurantId, waiterId, status])
+  @@index([tableId, status])
+  @@index([waiterId, status])
   @@map("orders")
 }
 
@@ -592,6 +596,7 @@ model Expense {
   updatedAt       DateTime @updatedAt
 
   @@index([restaurantId])
+  @@index([supplierId])
   @@index([createdAt])
   @@index([isActive])
   @@index([restaurantId, isActive, createdAt])
@@ -643,6 +648,7 @@ model AuditLog {
   @@index([actorUserId])
   @@index([entity, entityId])
   @@index([createdAt])
+  @@index([restaurantId, createdAt])
   @@map("audit_logs")
 }
 

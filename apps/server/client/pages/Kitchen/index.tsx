@@ -4,8 +4,6 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { Badge, PageTitle, Panel } from "@/client/components/ui";
-import { usePusherEvent } from "@/client/hooks/usePusher";
-import { useAuthStore } from "@/client/store/authStore";
 import { dictionary, usePreferencesStore } from "@/client/store/preferencesStore";
 
 type Order = {
@@ -96,16 +94,12 @@ function OrderCard({
 
 export function KitchenPage() {
   const queryClient = useQueryClient();
-  const restaurant = useAuthStore((state) => state.restaurant);
   const language = usePreferencesStore((state) => state.settings.language);
   const t = dictionary[language];
-  usePusherEvent(restaurant?.id ? `kitchen:${restaurant.id}` : null, "new-order", () => {
-    void queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
-  });
   const orders = useQuery({
     queryKey: ["kitchen-orders"],
     queryFn: () => getData<Paginated<Order>>("/orders?status=IN_KITCHEN&limit=50"),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
   const markDone = useMutation({
     mutationFn: (payload: { orderId: string; itemId: string }) =>

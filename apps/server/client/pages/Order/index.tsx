@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { apiClient, getData, Paginated } from "@/client/api/client";
 import { PageTitle, Panel } from "@/client/components/ui";
 import { useAuthStore } from "@/client/store/authStore";
@@ -20,6 +20,8 @@ type Table = {
   id: string;
   number: number;
   status: string;
+  currentOrderId?: string | null;
+  zone?: { name: string };
 };
 type OrderDetail = {
   id: string;
@@ -58,6 +60,7 @@ function orderStatusLabel(status: string, t: Translation): string {
 
 export function OrderPage(props: OrderPageProps = {}) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const params = useParams<{ orderId?: string; tableId?: string }>();
   const searchParams = useSearchParams();
   const orderId = props.orderId || params.orderId;
@@ -68,6 +71,10 @@ export function OrderPage(props: OrderPageProps = {}) {
   const [tableId, setTableId] = useState(props.tableId || params.tableId || searchParams.get("tableId") || "");
   const guestCount = 1;
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [transferTargetId, setTransferTargetId] = useState("");
+  useEffect(() => {
+    router.prefetch("/tables");
+  }, [router]);
   const menu = useQuery({
     queryKey: ["menu-items", restaurant?.id],
     enabled: Boolean(restaurant?.id),
@@ -115,19 +122,41 @@ export function OrderPage(props: OrderPageProps = {}) {
       });
       return response.data.data.id;
     },
-    onSuccess: async () => {
+    onSuccess: (createdOrderId) => {
       setCart([]);
-      await Promise.all([
+      if (createdOrderId) {
+        queryClient.setQueryData<Paginated<Table>>(["tables", restaurant?.id], (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            items: current.items.map((table) =>
+              table.id === tableId ? { ...table, status: "OCCUPIED", currentOrderId: createdOrderId } : table
+            ),
+          };
+        });
+      }
+      router.replace("/tables");
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] }),
         queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] }),
         queryClient.invalidateQueries({ queryKey: ["active-orders", restaurant?.id] }),
         queryClient.invalidateQueries({ queryKey: ["order", orderId] }),
       ]);
-      window.location.href = "/tables";
     },
     onError: (error) => {
       console.error("[Order Error]", error);
       alert(error instanceof Error ? error.message : "Buyurtma yaratishda xato");
+    },
+  });
+  const transferOrder = useMutation({
+    mutationFn: () => apiClient.post(`/orders/${orderId}/transfer`, { targetTableId: transferTargetId }),
+    onSuccess: async () => {
+      setTransferTargetId("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["order", orderId] }),
+        queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["active-orders", restaurant?.id] }),
+      ]);
     },
   });
   function addToCart(item: MenuItem) {
@@ -147,8 +176,20 @@ export function OrderPage(props: OrderPageProps = {}) {
     <>
       <PageTitle title={t.order} subtitle={t.menuAndCart} />
       {existingOrder.data ? (
-        <div className="mb-4 rounded-md border border-slate-300 bg-white p-3 text-sm shadow-sm">
-          Order #{existingOrder.data.orderNumber} · {t.table} {existingOrder.data.table.number} · {orderStatusLabel(existingOrder.data.status, t)}
+        <div className="mb-4 space-y-3 rounded-md border border-slate-300 bg-white p-3 text-sm shadow-sm">
+          <div>Order #{existingOrder.data.orderNumber} · {t.table} {existingOrder.data.table.number} · {orderStatusLabel(existingOrder.data.status, t)}</div>
+          {!["PAID", "CANCELLED"].includes(existingOrder.data.status) ? (
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <select className="rounded-md border px-3 py-2" value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)}>
+                <option value="">Boshqa bo'sh stolni tanlang</option>
+                {tables.data?.items.filter((table) => table.status === "FREE" && table.id !== existingOrder.data?.table.id).map((table) => (
+                  <option key={table.id} value={table.id}>{table.zone?.name ? `${table.zone.name} · ` : ""}Stol {table.number}</option>
+                ))}
+              </select>
+              <button type="button" disabled={!transferTargetId || transferOrder.isPending} className="rounded-md border border-blue-300 px-3 py-2 font-semibold text-blue-700 disabled:opacity-50" onClick={() => transferOrder.mutate()}>Ko'chirish</button>
+              {transferOrder.error ? <div className="text-rose-600 sm:col-span-2">Stolga ko'chirib bo'lmadi</div> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="grid items-start gap-3 md:grid-cols-[1fr_320px]">

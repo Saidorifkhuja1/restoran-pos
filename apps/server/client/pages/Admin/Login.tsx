@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { apiClient, ApiEnvelope } from "@/client/api/client";
@@ -41,8 +42,11 @@ export function AdminLogin() {
       const { user, restaurant, token } = response.data.data;
       setAuth({ user, restaurant, token });
       window.location.href = homePathByRole(user.role);
-    } catch {
-      form.setError("root", { message: "Login yoki parol noto'g'ri" });
+    } catch (error) {
+      const message = axios.isAxiosError<{ error?: string }>(error)
+        ? error.response?.data?.error
+        : undefined;
+      form.setError("root", { message: message || "Login yoki parol noto'g'ri" });
     }
   }
 

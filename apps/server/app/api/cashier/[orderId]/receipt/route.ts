@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, context: RouteParams) {
         createdAt: true,
         table: { select: { number: true } },
         waiter: { select: { name: true } },
-        restaurant: { select: { name: true, address: true, phone: true, receiptFooter: true, taxPercent: true } },
+        restaurant: { select: { name: true, address: true, phone: true, receiptFooter: true } },
         items: {
           where: { status: { not: "CANCELLED" } },
           select: { name: true, price: true, quantity: true },
@@ -41,8 +41,6 @@ export async function GET(request: NextRequest, context: RouteParams) {
             method: true,
             subtotal: true,
             discountAmount: true,
-            taxPercent: true,
-            taxAmount: true,
             totalAmount: true,
             receivedAmount: true,
             changeAmount: true,
@@ -55,7 +53,8 @@ export async function GET(request: NextRequest, context: RouteParams) {
     if (!order) return notFound("Buyurtma topilmadi");
 
     const subtotal = order.payment?.subtotal ?? order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const total = order.payment?.totalAmount ?? Math.round(subtotal * (1 + order.restaurant.taxPercent / 100));
+    const discountAmount = order.payment?.discountAmount || 0;
+    const total = order.payment?.totalAmount ?? Math.max(0, subtotal - discountAmount);
     const rows = order.items
       .map(
         (item) =>
@@ -87,8 +86,7 @@ table{width:100%;border-collapse:collapse}td:last-child{text-align:right}.total{
 <div class="line"></div>
 <table>
 <tr><td>Subtotal</td><td>${subtotal.toLocaleString("uz-UZ")}</td></tr>
-<tr><td>Chegirma</td><td>${(order.payment?.discountAmount || 0).toLocaleString("uz-UZ")}</td></tr>
-<tr><td>QQS ${order.payment?.taxPercent ?? order.restaurant.taxPercent}%</td><td>${(order.payment?.taxAmount || total - subtotal).toLocaleString("uz-UZ")}</td></tr>
+<tr><td>Chegirma</td><td>${discountAmount.toLocaleString("uz-UZ")}</td></tr>
 <tr class="total"><td>Jami</td><td>${total.toLocaleString("uz-UZ")} UZS</td></tr>
 </table>
 <p>To'lov: ${escapeHtml(order.payment?.method || "-")}</p>

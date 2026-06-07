@@ -6,6 +6,7 @@ import { badRequest, forbidden, notFound, serverError, success } from "@/lib/res
 import { publishEvent, cashierChannel, restaurantChannel } from "@/lib/pusher";
 import { deleteCacheByPattern } from "@/lib/redis";
 import { zodMessage } from "@/lib/route-helpers";
+import { syncTableState } from "@/lib/table-status";
 
 const webhookSchema = z.object({
   orderId: z.string().min(1),
@@ -53,7 +54,8 @@ function verifyProviderSignature(request: NextRequest, payload: string): boolean
   }
 
   const secret = process.env.PAYMENT_WEBHOOK_SECRET;
-  return !secret || request.headers.get("x-webhook-secret") === secret;
+  const signature = request.headers.get("x-webhook-secret") || "";
+  return Boolean(secret && signature && timingSafeEqual(signature, secret));
 }
 
 export async function POST(request: NextRequest) {
@@ -63,8 +65,7 @@ export async function POST(request: NextRequest) {
       return forbidden("Webhook imzosi noto'g'ri");
     }
 
-    const body = JSON.parse(rawBody) as unknown;
-    const parsed = webhookSchema.safeParse(body);
+    const parsed = webhookSchema.safeParse(JSON.parse(rawBody) as unknown);
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
     if (parsed.data.status !== "PAID") return success({ accepted: true });
 
@@ -76,7 +77,6 @@ export async function POST(request: NextRequest) {
         tableId: true,
         status: true,
         payment: { select: { id: true } },
-        restaurant: { select: { taxPercent: true } },
         items: { where: { status: { not: "CANCELLED" } }, select: { price: true, quantity: true } },
       },
     });
@@ -94,16 +94,23 @@ export async function POST(request: NextRequest) {
     if (order.payment) return success({ accepted: true, duplicate: true });
 
     const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const taxAmount = Math.round((subtotal * order.restaurant.taxPercent) / 100);
-    const totalAmount = subtotal + taxAmount;
+    const taxAmount = 0;
+    const totalAmount = subtotal;
     if (parsed.data.amount !== totalAmount) return badRequest("To'lov summasi mos emas");
 
-    const payment = await prisma.$transaction(async (tx) => {
+    const { payment, table } = await prisma.$transaction(async (tx) => {
       const payableOrder = await tx.order.updateMany({
-        where: { id: order.id, restaurantId: order.restaurantId, status: { notIn: ["PAID", "CANCELLED"] }, payment: null },
+        where: {
+          id: order.id,
+          restaurantId: order.restaurantId,
+          status: { notIn: ["PAID", "CANCELLED"] },
+          payment: null,
+        },
         data: { status: "PAID", paidAt: new Date() },
       });
-      if (payableOrder.count === 0) throw new Error("ORDER_ALREADY_PAID");
+      if (payableOrder.count === 0) {
+        throw new Error("ORDER_ALREADY_PAID");
+      }
 
       const cashier =
         (await tx.user.findFirst({
@@ -131,7 +138,7 @@ export async function POST(request: NextRequest) {
           provider,
           providerPaymentId: parsed.data.providerPaymentId,
           subtotal,
-          taxPercent: order.restaurant.taxPercent,
+          taxPercent: 0,
           taxAmount,
           totalAmount,
           cardAmount: totalAmount,
@@ -140,18 +147,19 @@ export async function POST(request: NextRequest) {
         select: { id: true, orderId: true, totalAmount: true, method: true, receiptNumber: true },
       });
 
-      await tx.table.updateMany({
-        where: { id: order.tableId, restaurantId: order.restaurantId, currentOrderId: order.id },
-        data: { status: "FREE", currentOrderId: null },
-      });
-      return created;
+      const tableState = await syncTableState(tx, order.tableId, order.restaurantId);
+      return { payment: created, table: tableState };
     });
 
     await Promise.all([
       deleteCacheByPattern(`reports:${order.restaurantId}:*`),
       publishEvent(cashierChannel(order.restaurantId), "payment-done", payment),
       publishEvent(restaurantChannel(order.restaurantId), "order:updated", { orderId: order.id, status: "PAID" }),
-      publishEvent(restaurantChannel(order.restaurantId), "table:status", { tableId: order.tableId, status: "FREE" }),
+      publishEvent(restaurantChannel(order.restaurantId), "table:status", {
+        tableId: order.tableId,
+        status: table.status,
+        currentOrderId: table.currentOrderId,
+      }),
     ]);
 
     return success({ accepted: true, payment });

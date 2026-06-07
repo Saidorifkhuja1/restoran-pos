@@ -11,44 +11,73 @@ export function useRealtimeInvalidation() {
   const kitchenChannel = restaurant?.id ? `kitchen:${restaurant.id}` : null;
   const cashierChannel = restaurant?.id ? `cashier:${restaurant.id}` : null;
 
+  const invalidate = (...queryKeys: string[]) => {
+    for (const queryKey of queryKeys) {
+      void queryClient.invalidateQueries({ queryKey: [queryKey] });
+    }
+  };
+
   const invalidateOrders = () => {
-    void queryClient.invalidateQueries({ queryKey: ["orders"] });
-    void queryClient.invalidateQueries({ queryKey: ["order"] });
-    void queryClient.invalidateQueries({ queryKey: ["active-orders"] });
-    void queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
-    void queryClient.invalidateQueries({ queryKey: ["cashier-pending"] });
-    void queryClient.invalidateQueries({ queryKey: ["admin-report"] });
-    void queryClient.invalidateQueries({ queryKey: ["report-today"] });
-    void queryClient.invalidateQueries({ queryKey: ["shifts-page"] });
-    void queryClient.invalidateQueries({ queryKey: ["shift-page-receipts"] });
+    invalidate(
+      "orders",
+      "order",
+      "active-orders",
+      "cashier-all-orders",
+      "kitchen-orders",
+      "cashier-pending",
+      "admin-overview",
+      "shifts-page",
+      "shift-page-receipts",
+      "waiter-profile-receipts"
+    );
   };
   const invalidateTables = () => {
-    void queryClient.invalidateQueries({ queryKey: ["tables"] });
+    invalidate("tables", "cashier-tables", "admin-overview");
   };
   const invalidateReservations = () => {
-    void queryClient.invalidateQueries({ queryKey: ["reservations"] });
+    invalidate("reservations");
     invalidateTables();
   };
   const invalidateMenu = () => {
-    void queryClient.invalidateQueries({ queryKey: ["menu-items"] });
-    void queryClient.invalidateQueries({ queryKey: ["menu-admin-items"] });
-    void queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
+    invalidate(
+      "menu-items",
+      "menu-admin-items",
+      "menu-categories",
+      "cashier-menu",
+      "cashier-menu-categories",
+      "admin-overview"
+    );
   };
   const invalidateAdminData = () => {
-    void queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
-    void queryClient.invalidateQueries({ queryKey: ["zones"] });
-    void queryClient.invalidateQueries({ queryKey: ["discounts"] });
-    void queryClient.invalidateQueries({ queryKey: ["expenses"] });
-    void queryClient.invalidateQueries({ queryKey: ["admin-restaurant"] });
-    void queryClient.invalidateQueries({ queryKey: ["settings"] });
-    void queryClient.invalidateQueries({ queryKey: ["audit"] });
-    void queryClient.invalidateQueries({ queryKey: ["admin-report"] });
-    void queryClient.invalidateQueries({ queryKey: ["report-today"] });
+    invalidate(
+      "admin-staff",
+      "admin-profile",
+      "admin-overview",
+      "cashier-staff",
+      "zones",
+      "cashier-zones",
+      "discounts",
+      "cashier-discounts",
+      "expenses",
+      "suppliers",
+      "salaries",
+      "admin-restaurant",
+      "settings",
+      "cashier-settings",
+      "audit",
+      "admin-report",
+      "report-today"
+    );
   };
   const invalidateShifts = () => {
-    void queryClient.invalidateQueries({ queryKey: ["current-shift"] });
-    void queryClient.invalidateQueries({ queryKey: ["shifts-page"] });
-    void queryClient.invalidateQueries({ queryKey: ["shift-page-receipts"] });
+    invalidate(
+      "current-shift",
+      "shifts-page",
+      "shift-page-receipts",
+      "admin-overview",
+      "admin-report",
+      "report-today"
+    );
   };
 
   usePusherEvent(restaurantChannel, "order:created", invalidateOrders);
@@ -65,6 +94,8 @@ export function useRealtimeInvalidation() {
   });
   usePusherEvent(restaurantChannel, "discount:updated", invalidateAdminData);
   usePusherEvent(restaurantChannel, "expense:updated", invalidateAdminData);
+  usePusherEvent(restaurantChannel, "supplier:updated", invalidateAdminData);
+  usePusherEvent(restaurantChannel, "salary:updated", invalidateAdminData);
   usePusherEvent(restaurantChannel, "settings:updated", invalidateAdminData);
   usePusherEvent(restaurantChannel, "restaurant:updated", invalidateAdminData);
   usePusherEvent(restaurantChannel, "shift:updated", invalidateShifts);

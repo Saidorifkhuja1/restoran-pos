@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { apiClient, ApiEnvelope } from "@/client/api/client";
 import { AuthRestaurant, AuthRole, AuthUser, useAuthStore } from "@/client/store/authStore";
 
@@ -26,7 +26,6 @@ export function AuthBootstrap({
   const token = useAuthStore((state) => state.token);
   const hydrated = useAuthStore((state) => state.hydrated);
   const user = useAuthStore((state) => state.user);
-  const [checking, setChecking] = useState(true);
   const validatedKey = useRef<string | null>(null);
   const rolesKey = useMemo(() => allowedRoles?.join("|") ?? "*", [allowedRoles]);
 
@@ -43,11 +42,9 @@ export function AuthBootstrap({
 
     const authKey = `${token}:${rolesKey}`;
     if (validatedKey.current === authKey) {
-      setChecking(false);
       return undefined;
     }
 
-    setChecking(true);
     let mounted = true;
     apiClient
       .get<ApiEnvelope<MeResponse>>("/auth/me")
@@ -66,7 +63,6 @@ export function AuthBootstrap({
           token,
         });
         validatedKey.current = authKey;
-        setChecking(false);
       })
       .catch(() => {
         if (mounted) {
@@ -78,10 +74,10 @@ export function AuthBootstrap({
     return () => {
       mounted = false;
     };
-  }, [allowedRoles, hydrated, loginPath, logout, rolesKey, setAuth, setHydrated, token]);
+  }, [allowedRoles, hydrated, loginPath, logout, rolesKey, setAuth, setHydrated, token, user]);
 
   const isAllowed = Boolean(
-    !checking && hydrated && user && (!allowedRoles || allowedRoles.includes(user.role))
+    hydrated && user && (!allowedRoles || allowedRoles.includes(user.role))
   );
 
   if (!isAllowed) {

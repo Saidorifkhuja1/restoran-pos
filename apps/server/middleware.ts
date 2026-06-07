@@ -16,9 +16,19 @@ const allowedOrigins = (process.env.CORS_ORIGINS || defaultAllowedOrigins)
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function isAllowedOrigin(request: NextRequest, origin: string): boolean {
+  if (allowedOrigins.includes(origin)) return true;
+
+  try {
+    return new URL(origin).host === request.headers.get("host");
+  } catch {
+    return false;
+  }
+}
+
 function corsHeaders(request: NextRequest): HeadersInit {
   const origin = request.headers.get("origin") ?? "";
-  const allowedOrigin = allowedOrigins.includes(origin)
+  const allowedOrigin = isAllowedOrigin(request, origin)
     ? origin
     : allowedOrigins[0] ?? "*";
 
@@ -97,7 +107,7 @@ export async function middleware(request: NextRequest) {
     const origin = request.headers.get("origin");
     const csrfHeader = request.headers.get("x-restopos-csrf");
 
-    if (origin && !allowedOrigins.includes(origin)) {
+    if (origin && !isAllowedOrigin(request, origin)) {
       return NextResponse.json(
         { success: false, error: "CSRF origin rejected" },
         { status: 403, headers: corsHeaders(request) }

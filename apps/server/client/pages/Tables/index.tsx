@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { getData, Paginated } from "@/client/api/client";
 import { Badge, PageTitle, Panel } from "@/client/components/ui";
-import { usePusherEvent } from "@/client/hooks/usePusher";
 import { useAuthStore } from "@/client/store/authStore";
 import { dictionary, usePreferencesStore } from "@/client/store/preferencesStore";
 
@@ -83,25 +82,22 @@ function ActiveChecks({ orders, title, t }: { orders: ActiveOrder[]; title: stri
 }
 
 export function TablesPage() {
-  const queryClient = useQueryClient();
   const router = useRouter();
   const { restaurant } = useAuthStore();
   const language = usePreferencesStore((state) => state.settings.language);
   const t = dictionary[language];
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
-  usePusherEvent(restaurant?.id ? `restaurant:${restaurant.id}` : null, "table:status", () => {
-    void queryClient.invalidateQueries({ queryKey: ["tables", restaurant?.id] });
-  });
   const tables = useQuery({
     queryKey: ["tables", restaurant?.id],
     enabled: Boolean(restaurant?.id),
     queryFn: () => getData<Paginated<Table>>(`/restaurants/${restaurant?.id}/tables?limit=100`),
+    refetchInterval: 30_000,
   });
   const activeOrders = useQuery({
     queryKey: ["active-orders", restaurant?.id],
     enabled: Boolean(restaurant?.id),
-    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&scope=restaurant&limit=100"),
-    refetchInterval: 10_000,
+    queryFn: () => getData<Paginated<ActiveOrder>>("/orders?active=true&limit=100"),
+    refetchInterval: 30_000,
   });
   const zones = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; color: string; total: number; busy: number }>();

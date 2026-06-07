@@ -6,6 +6,7 @@ import { badRequest, forbidden, serverError, success, unauthorized } from "@/lib
 import { getPagination, getRestaurantToken, zodMessage } from "@/lib/route-helpers";
 import { kitchenChannel, publishEvent, restaurantChannel } from "@/lib/pusher";
 import { writeAuditLog } from "@/lib/audit";
+import { syncTableState } from "@/lib/table-status";
 import { UserRole } from "@restopos/types";
 
 const orderItemSchema = z.object({
@@ -29,6 +30,8 @@ const orderStatusQuerySchema = z
 
 const readRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.KITCHEN, UserRole.CASHIER] as const;
 const createRoles = [UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER, UserRole.CASHIER] as const;
+
+class TableClaimError extends Error {}
 
 export async function GET(request: NextRequest) {
   try {
@@ -103,11 +106,12 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
 
     const data = parsed.data;
-    const table = await prisma.table.findFirst({
+    const tableRecord = await prisma.table.findFirst({
       where: { id: data.tableId, restaurantId: token.restaurantId },
-      select: { id: true, status: true },
+      select: { id: true },
     });
-    if (!table) return badRequest("Stol topilmadi");
+    if (!tableRecord) return badRequest("Stol topilmadi");
+    const table = await syncTableState(prisma, data.tableId, token.restaurantId);
     if (table.status !== "FREE") return forbidden("Bu joy band. To'lov qilinmaguncha yangi chek ochib bo'lmaydi");
 
     let waiterId = token.userId;
@@ -145,12 +149,17 @@ export async function POST(request: NextRequest) {
     }
 
     const order = await prisma.$transaction(async (tx) => {
-      const lockedTable = await tx.table.updateMany({
-        where: { id: data.tableId, restaurantId: token.restaurantId, status: "FREE" },
+      const claimedTable = await tx.table.updateMany({
+        where: {
+          id: data.tableId,
+          restaurantId: token.restaurantId,
+          status: "FREE",
+          currentOrderId: null,
+        },
         data: { status: "OCCUPIED" },
       });
-      if (lockedTable.count === 0) {
-        throw new Error("TABLE_NOT_FREE");
+      if (claimedTable.count !== 1) {
+        throw new TableClaimError("Table was claimed by another order");
       }
 
       const counter = await tx.restaurantCounter.upsert({
@@ -211,7 +220,7 @@ export async function POST(request: NextRequest) {
 
       await tx.table.update({
         where: { id: data.tableId },
-        data: { currentOrderId: created.id },
+        data: { status: "OCCUPIED", currentOrderId: created.id },
       });
 
       return created;
@@ -236,8 +245,8 @@ export async function POST(request: NextRequest) {
 
     return success(order, 201);
   } catch (error) {
-    if (error instanceof Error && error.message === "TABLE_NOT_FREE") {
-      return forbidden("Bu joy band. To'lov qilinmaguncha yangi chek ochib bo'lmaydi");
+    if (error instanceof TableClaimError) {
+      return forbidden("Bu joy band. Yangi chek ochishdan oldin stolni yangilang");
     }
     console.error("[Create Order Error]", error);
     return serverError("Buyurtma yaratishda xato");

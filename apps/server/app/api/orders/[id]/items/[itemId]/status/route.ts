@@ -67,7 +67,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       return { item: updatedItem, updatedOrder: maybeUpdatedOrder };
     });
 
-    await publishEvent(restaurantChannel(token.restaurantId), "kitchen:item-done", {
+    await publishEvent(restaurantChannel(token.restaurantId), "order:updated", {
       orderId: order.id,
       item,
       order: updatedOrder,

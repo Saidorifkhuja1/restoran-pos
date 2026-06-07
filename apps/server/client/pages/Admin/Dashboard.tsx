@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { UserRole } from "@restopos/types";
 import { apiClient, getData } from "@/client/api/client";
+import { orderDisplayStatusLabel } from "@/client/lib/order-status";
 import { useAuthStore } from "@/client/store/authStore";
 import { Language, usePreferencesStore } from "@/client/store/preferencesStore";
 
@@ -1166,7 +1167,7 @@ function ReceiptsSection({ orders, t }: { orders: Order[]; t: typeof text.uz }) 
               <div className="rounded-[14px] border border-[var(--color-border)] bg-[var(--color-bg)] p-4" key={order.id}>
                 <div className="flex items-center justify-between">
                   <div className="text-lg font-black">#{order.orderNumber}</div>
-                  <Badge>{order.status}</Badge>
+                  <Badge>{orderDisplayStatusLabel(order.status)}</Badge>
                 </div>
                 <div className="mt-2 text-sm font-semibold text-[var(--color-muted)]">{order.table.zone.name} · {placeLabel(order.table.zone.name, order.table.number, t)}</div>
                 <div className="text-sm font-semibold text-[var(--color-muted)]">{t.waiter}: {order.waiter.name}</div>
